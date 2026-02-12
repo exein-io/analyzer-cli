@@ -15,12 +15,14 @@ use uuid::Uuid;
 #[derive(Debug, Deserialize)]
 pub struct Page<T> {
     pub data: Vec<T>,
+    #[allow(dead_code)]
     #[serde(default, rename = "_links")]
     pub links: PageLinks,
 }
 
 #[derive(Debug, Default, Deserialize)]
 pub struct PageLinks {
+    #[allow(dead_code)]
     pub next: Option<String>,
 }
 
@@ -185,6 +187,7 @@ pub struct ScanTypeRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct HealthStatus {
+    #[allow(dead_code)]
     pub healthy: bool,
 }
 

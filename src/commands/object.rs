@@ -14,11 +14,17 @@ pub async fn run_list(client: &AnalyzerClient, format: Format) -> Result<()> {
 
     match format {
         Format::Json => {
-            println!("{}", serde_json::to_string_pretty(&serde_json::to_value(&objects)?)?);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::to_value(&objects)?)?
+            );
         }
         Format::Human | Format::Table => {
             if objects.is_empty() {
-                output::status("Objects", "None found. Create one with: analyzer object new <name>");
+                output::status(
+                    "Objects",
+                    "None found. Create one with: analyzer object new <name>",
+                );
                 return Ok(());
             }
 
@@ -39,7 +45,7 @@ pub async fn run_list(client: &AnalyzerClient, format: Format) -> Result<()> {
                 };
 
                 table.add_row(vec![
-                    comfy_table::Cell::new(&obj.id),
+                    comfy_table::Cell::new(obj.id),
                     comfy_table::Cell::new(&obj.name),
                     comfy_table::Cell::new(obj.description.as_deref().unwrap_or("-")),
                     score_cell(score),
@@ -71,7 +77,10 @@ pub async fn run_new(
 
     match format {
         Format::Json => {
-            println!("{}", serde_json::to_string_pretty(&serde_json::to_value(&object)?)?);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::to_value(&object)?)?
+            );
         }
         Format::Human | Format::Table => {
             output::success(&format!("Created object '{}' ({})", object.name, object.id));

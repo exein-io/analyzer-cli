@@ -22,7 +22,11 @@ pub async fn run_login(url: Option<&str>, profile_name: Option<&str>) -> Result<
     for line in &banner {
         eprintln!("  {}", style(line).cyan().bold());
     }
-    eprintln!("  {} {}", style(" analyzer").dim(), style(format!("v{}", env!("CARGO_PKG_VERSION"))).dim());
+    eprintln!(
+        "  {} {}",
+        style(" analyzer").dim(),
+        style(format!("v{}", env!("CARGO_PKG_VERSION"))).dim()
+    );
     eprintln!();
     eprintln!(
         "  {}",
@@ -87,11 +91,7 @@ pub async fn run_login(url: Option<&str>, profile_name: Option<&str>) -> Result<
 }
 
 /// Show current identity / configuration.
-pub fn run_whoami(
-    api_key: Option<&str>,
-    url: Option<&str>,
-    profile: Option<&str>,
-) -> Result<()> {
+pub fn run_whoami(api_key: Option<&str>, url: Option<&str>, profile: Option<&str>) -> Result<()> {
     let config = ConfigFile::load().unwrap_or_default();
     let profile_name = profile
         .map(String::from)

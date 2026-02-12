@@ -1,6 +1,6 @@
 //! Output formatting: human (colored), JSON, and table modes.
 
-use comfy_table::{Cell, Color, presets::UTF8_FULL_CONDENSED, ContentArrangement, Table};
+use comfy_table::{Cell, Color, ContentArrangement, Table, presets::UTF8_FULL_CONDENSED};
 use console::style;
 use owo_colors::OwoColorize;
 

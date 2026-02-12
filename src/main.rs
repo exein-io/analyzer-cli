@@ -298,9 +298,7 @@ async fn run(cli: Cli) -> Result<()> {
                 value,
                 profile: p,
             } => commands::config::run_set(&key, &value, p.as_deref()),
-            ConfigCommand::Get { key, profile: p } => {
-                commands::config::run_get(&key, p.as_deref())
-            }
+            ConfigCommand::Get { key, profile: p } => commands::config::run_get(&key, p.as_deref()),
         },
 
         // -- Completions (no API key required) ----------------------------
@@ -319,13 +317,8 @@ async fn run(cli: Cli) -> Result<()> {
                     name,
                     description,
                     tags,
-                } => {
-                    commands::object::run_new(&client, name, description, tags, format)
-                        .await
-                }
-                ObjectCommand::Delete { id } => {
-                    commands::object::run_delete(&client, id).await
-                }
+                } => commands::object::run_new(&client, name, description, tags, format).await,
+                ObjectCommand::Delete { id } => commands::object::run_delete(&client, id).await,
             }
         }
 
@@ -342,8 +335,8 @@ async fn run(cli: Cli) -> Result<()> {
                     timeout,
                 } => {
                     commands::scan::run_new(
-                        &client, object_id, file, scan_type, analyses, format, wait,
-                        interval, timeout,
+                        &client, object_id, file, scan_type, analyses, format, wait, interval,
+                        timeout,
                     )
                     .await
                 }

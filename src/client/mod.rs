@@ -60,6 +60,7 @@ impl AnalyzerClient {
         Self::json(resp).await
     }
 
+    #[allow(dead_code)]
     pub async fn get_object(&self, id: Uuid) -> Result<Object> {
         let url = self.base_url.join(&format!("objects/{id}"))?;
         let resp = self.client.get(url).send().await?;
@@ -80,12 +81,14 @@ impl AnalyzerClient {
 
     // -- Scans ----------------------------------------------------------------
 
+    #[allow(dead_code)]
     pub async fn list_scans(&self) -> Result<Vec<Scan>> {
         let url = self.base_url.join("scans/")?;
         let resp = self.client.get(url).send().await?;
         Self::json(resp).await
     }
 
+    #[allow(dead_code)]
     pub async fn get_scan(&self, id: Uuid) -> Result<Scan> {
         let url = self.base_url.join(&format!("scans/{id}"))?;
         let resp = self.client.get(url).send().await?;

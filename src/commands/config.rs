@@ -10,7 +10,10 @@ use crate::output;
 pub fn run_show() -> Result<()> {
     let config = ConfigFile::load().unwrap_or_default();
 
-    eprintln!("{}", style("Analyzer CLI Configuration").bold().underlined());
+    eprintln!(
+        "{}",
+        style("Analyzer CLI Configuration").bold().underlined()
+    );
     eprintln!();
     eprintln!(
         "  {:>16}  {}",
@@ -52,8 +55,9 @@ pub fn run_set(key: &str, value: &str, profile: Option<&str>) -> Result<()> {
 
     match key {
         "url" => {
-            let _: url::Url =
-                value.parse().map_err(|_| anyhow::anyhow!("invalid URL: {value}"))?;
+            let _: url::Url = value
+                .parse()
+                .map_err(|_| anyhow::anyhow!("invalid URL: {value}"))?;
             p.url = Some(value.to_string());
         }
         "api-key" | "api_key" => {

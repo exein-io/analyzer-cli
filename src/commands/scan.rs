@@ -10,9 +10,12 @@ use uuid::Uuid;
 
 use crate::client::AnalyzerClient;
 use crate::client::models::{AnalysisStatus, AnalysisStatusEntry, ScanTypeRequest};
-use crate::output::{self, Format, format_score, format_status, score_cell, status_cell, styled_table};
+use crate::output::{
+    self, Format, format_score, format_status, score_cell, status_cell, styled_table,
+};
 
 /// Create a new scan.
+#[allow(clippy::too_many_arguments)]
 pub async fn run_new(
     client: &AnalyzerClient,
     object_id: Uuid,
@@ -27,9 +30,7 @@ pub async fn run_new(
     // If no analyses specified, fetch all available for this scan type.
     let analyses = if analyses.is_empty() {
         let types = client.get_scan_types().await?;
-        let matching = types
-            .iter()
-            .find(|t| t.image_type == scan_type);
+        let matching = types.iter().find(|t| t.image_type == scan_type);
         match matching {
             Some(t) => t.analyses.iter().map(|a| a.analysis_type.clone()).collect(),
             None => bail!(
@@ -111,11 +112,7 @@ pub async fn run_report(
 }
 
 /// Download the SBOM.
-pub async fn run_sbom(
-    client: &AnalyzerClient,
-    scan_id: Uuid,
-    output_path: PathBuf,
-) -> Result<()> {
+pub async fn run_sbom(client: &AnalyzerClient, scan_id: Uuid, output_path: PathBuf) -> Result<()> {
     output::status("Downloading", "SBOM...");
     let bytes = client.download_sbom(scan_id).await?;
     tokio::fs::write(&output_path, &bytes).await?;
@@ -224,7 +221,10 @@ fn print_status(
                 if let Ok(entry) = serde_json::from_value::<AnalysisStatusEntry>(val.clone()) {
                     let mut m = serde_json::Map::new();
                     m.insert("id".into(), serde_json::to_value(entry.id)?);
-                    m.insert("status".into(), serde_json::to_value(entry.status.to_string())?);
+                    m.insert(
+                        "status".into(),
+                        serde_json::to_value(entry.status.to_string())?,
+                    );
                     map.insert(key.clone(), serde_json::Value::Object(m));
                 }
             }
@@ -297,9 +297,7 @@ async fn wait_for_completion(
             _ => {
                 let mut parts = Vec::new();
                 for (key, val) in &status.analyses {
-                    if let Ok(entry) =
-                        serde_json::from_value::<AnalysisStatusEntry>(val.clone())
-                    {
+                    if let Ok(entry) = serde_json::from_value::<AnalysisStatusEntry>(val.clone()) {
                         let icon = match entry.status {
                             AnalysisStatus::Success => "done",
                             AnalysisStatus::InProgress => "running",

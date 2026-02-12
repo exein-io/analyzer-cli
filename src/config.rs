@@ -23,6 +23,7 @@ const DEFAULT_PROFILE: &str = "default";
 pub struct ResolvedConfig {
     pub api_key: String,
     pub url: Url,
+    #[allow(dead_code)]
     pub profile: String,
 }
 
@@ -63,8 +64,7 @@ impl ConfigFile {
         }
         let contents = std::fs::read_to_string(&path)
             .with_context(|| format!("failed to read {}", path.display()))?;
-        toml::from_str(&contents)
-            .with_context(|| format!("failed to parse {}", path.display()))
+        toml::from_str(&contents).with_context(|| format!("failed to parse {}", path.display()))
     }
 
     /// Save to disk, creating parent directories as needed.
@@ -74,8 +74,7 @@ impl ConfigFile {
             std::fs::create_dir_all(parent)
                 .with_context(|| format!("failed to create {}", parent.display()))?;
         }
-        let contents =
-            toml::to_string_pretty(self).context("failed to serialize config")?;
+        let contents = toml::to_string_pretty(self).context("failed to serialize config")?;
         std::fs::write(&path, contents)
             .with_context(|| format!("failed to write {}", path.display()))?;
         Ok(())
@@ -114,12 +113,9 @@ pub fn resolve(
 ) -> Result<ResolvedConfig> {
     let config_file = ConfigFile::load().unwrap_or_default();
 
-    let profile_name = cli_profile
-        .map(String::from)
-        .unwrap_or_else(|| {
-            std::env::var("ANALYZER_PROFILE")
-                .unwrap_or_else(|_| config_file.default_profile.clone())
-        });
+    let profile_name = cli_profile.map(String::from).unwrap_or_else(|| {
+        std::env::var("ANALYZER_PROFILE").unwrap_or_else(|_| config_file.default_profile.clone())
+    });
 
     let profile = config_file.profile(Some(&profile_name));
 
@@ -129,8 +125,9 @@ pub fn resolve(
         .or_else(|| std::env::var("ANALYZER_URL").ok())
         .or_else(|| profile.url.clone())
         .unwrap_or_else(|| DEFAULT_URL.to_string());
-    let url: Url =
-        url_str.parse().with_context(|| format!("invalid URL: {url_str}"))?;
+    let url: Url = url_str
+        .parse()
+        .with_context(|| format!("invalid URL: {url_str}"))?;
 
     // API key: flag > env > profile
     let api_key = cli_api_key
