@@ -1,6 +1,6 @@
 # Analyzer CLI
 
-A delightful command-line interface for [Exein Analyzer](https://analyzer.exein.io) -- firmware & container security scanning.
+A command-line interface for [Exein Analyzer](https://analyzer.exein.io) -- firmware & container security scanning.
 
 Scan firmware images for CVEs, generate SBOMs, check CRA compliance, and more. All from your terminal.
 

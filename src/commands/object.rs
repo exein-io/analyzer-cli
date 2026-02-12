@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::client::AnalyzerClient;
 use crate::client::models::CreateObject;
-use crate::output::{self, Format, format_score, styled_table};
+use crate::output::{self, Format, score_cell, styled_table};
 
 /// List all objects.
 pub async fn run_list(client: &AnalyzerClient, format: Format) -> Result<()> {
@@ -32,16 +32,18 @@ pub async fn run_list(client: &AnalyzerClient, format: Format) -> Result<()> {
                     .and_then(|s| s.current.as_ref())
                     .map(|s| s.value);
 
+                let tags = if obj.tags.is_empty() {
+                    "-".to_string()
+                } else {
+                    obj.tags.join(", ")
+                };
+
                 table.add_row(vec![
-                    obj.id.to_string(),
-                    obj.name.clone(),
-                    obj.description.clone().unwrap_or_else(|| "-".into()),
-                    format_score(score),
-                    if obj.tags.is_empty() {
-                        "-".into()
-                    } else {
-                        obj.tags.join(", ")
-                    },
+                    comfy_table::Cell::new(&obj.id),
+                    comfy_table::Cell::new(&obj.name),
+                    comfy_table::Cell::new(obj.description.as_deref().unwrap_or("-")),
+                    score_cell(score),
+                    comfy_table::Cell::new(tags),
                 ]);
             }
 

@@ -1,4 +1,4 @@
-//! Analyzer CLI — a delightful interface for Exein Analyzer.
+//! Analyzer CLI — a command-line interface for Exein Analyzer.
 //!
 //! Scan firmware and container images for vulnerabilities, generate SBOMs,
 //! check CRA compliance, and more.
@@ -153,7 +153,8 @@ enum ScanCommand {
         #[arg(short = 't', long = "type")]
         scan_type: String,
 
-        /// Analysis types to run (e.g. info cve sbom malware).
+        /// Analysis types to run (e.g. info cve software-bom malware).
+        /// If omitted, all available analyses for the scan type are run.
         #[arg(short = 'a', long = "analysis", num_args = 1..)]
         analyses: Vec<String>,
 

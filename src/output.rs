@@ -1,6 +1,6 @@
 //! Output formatting: human (colored), JSON, and table modes.
 
-use comfy_table::{presets::UTF8_FULL_CONDENSED, ContentArrangement, Table};
+use comfy_table::{Cell, Color, presets::UTF8_FULL_CONDENSED, ContentArrangement, Table};
 use console::style;
 use owo_colors::OwoColorize;
 
@@ -55,6 +55,16 @@ pub fn format_score(score: Option<u8>) -> String {
     }
 }
 
+/// Return a comfy_table Cell for a score (correct width for table layout).
+pub fn score_cell(score: Option<u8>) -> Cell {
+    match score {
+        Some(s) if s >= 80 => Cell::new(s).fg(Color::Green),
+        Some(s) if s >= 50 => Cell::new(s).fg(Color::Yellow),
+        Some(s) => Cell::new(s).fg(Color::Red),
+        None => Cell::new("--").fg(Color::DarkGrey),
+    }
+}
+
 /// Format an analysis status string with colour.
 pub fn format_status(status: &str) -> String {
     match status {
@@ -64,5 +74,17 @@ pub fn format_status(status: &str) -> String {
         "canceled" => style(status).yellow().to_string(),
         "error" => style(status).red().to_string(),
         other => other.to_string(),
+    }
+}
+
+/// Return a comfy_table Cell for a status (correct width for table layout).
+pub fn status_cell(status: &str) -> Cell {
+    match status {
+        "success" => Cell::new(status).fg(Color::Green),
+        "pending" => Cell::new(status).fg(Color::DarkGrey),
+        "in-progress" => Cell::new(status).fg(Color::Cyan),
+        "canceled" => Cell::new(status).fg(Color::Yellow),
+        "error" => Cell::new(status).fg(Color::Red),
+        other => Cell::new(other),
     }
 }

@@ -15,10 +15,11 @@ use uuid::Uuid;
 #[derive(Debug, Deserialize)]
 pub struct Page<T> {
     pub data: Vec<T>,
+    #[serde(default, rename = "_links")]
     pub links: PageLinks,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct PageLinks {
     pub next: Option<String>,
 }
@@ -95,9 +96,15 @@ pub struct ScanImage {
 pub struct AnalysisEntry {
     pub id: Uuid,
     #[serde(rename = "type")]
+    pub entry_type: AnalysisEntryType,
+    pub status: AnalysisStatus,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AnalysisEntryType {
+    #[serde(rename = "type")]
     pub analysis_type: String,
     pub analyses: Vec<String>,
-    pub status: AnalysisStatus,
 }
 
 // === Scan Status ===
@@ -178,7 +185,7 @@ pub struct ScanTypeRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct HealthStatus {
-    pub status: String,
+    pub healthy: bool,
 }
 
 // === Analysis Status Entry (for parsing flattened scan status) ===

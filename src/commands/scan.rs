@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::client::AnalyzerClient;
 use crate::client::models::{AnalysisStatus, AnalysisStatusEntry, ScanTypeRequest};
-use crate::output::{self, Format, format_score, format_status, styled_table};
+use crate::output::{self, Format, format_score, format_status, score_cell, status_cell, styled_table};
 
 /// Create a new scan.
 pub async fn run_new(
@@ -24,6 +24,22 @@ pub async fn run_new(
     interval: Duration,
     timeout: Duration,
 ) -> Result<()> {
+    // If no analyses specified, fetch all available for this scan type.
+    let analyses = if analyses.is_empty() {
+        let types = client.get_scan_types().await?;
+        let matching = types
+            .iter()
+            .find(|t| t.image_type == scan_type);
+        match matching {
+            Some(t) => t.analyses.iter().map(|a| a.analysis_type.clone()).collect(),
+            None => bail!(
+                "unknown scan type '{scan_type}'. Run `analyzer scan types` to see available types."
+            ),
+        }
+    } else {
+        analyses
+    };
+
     let req = ScanTypeRequest {
         scan_type: scan_type.clone(),
         analyses: analyses.clone(),
@@ -147,7 +163,10 @@ pub async fn run_score(client: &AnalyzerClient, scan_id: Uuid, format: Format) -
                 let mut table = styled_table();
                 table.set_header(vec!["Analysis", "Score"]);
                 for s in &score.scores {
-                    table.add_row(vec![s.analysis_type.clone(), format_score(Some(s.score))]);
+                    table.add_row(vec![
+                        comfy_table::Cell::new(&s.analysis_type),
+                        score_cell(Some(s.score)),
+                    ]);
                 }
                 eprintln!("{table}");
             }
@@ -226,7 +245,10 @@ fn print_status(
             table.set_header(vec!["Analysis", "Status"]);
             for (key, val) in &status.analyses {
                 if let Ok(entry) = serde_json::from_value::<AnalysisStatusEntry>(val.clone()) {
-                    table.add_row(vec![key.clone(), format_status(&entry.status.to_string())]);
+                    table.add_row(vec![
+                        comfy_table::Cell::new(key),
+                        status_cell(&entry.status.to_string()),
+                    ]);
                 }
             }
             if table.row_count() > 0 {

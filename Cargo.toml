@@ -2,7 +2,7 @@
 name = "analyzer-cli"
 version = "0.1.0"
 edition = "2024"
-description = "A delightful CLI for Exein Analyzer - firmware and container security scanning"
+description = "CLI for Exein Analyzer - firmware and container security scanning"
 license = "Apache-2.0"
 repository = "https://github.com/exein-io/analyzer-cli"
 homepage = "https://analyzer.exein.io"

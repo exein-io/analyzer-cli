@@ -11,7 +11,24 @@ use crate::output;
 pub async fn run_login(url: Option<&str>, profile_name: Option<&str>) -> Result<()> {
     let profile_name = profile_name.unwrap_or("default");
 
-    output::status("Login", &format!("Configuring profile '{profile_name}'"));
+    eprintln!();
+    let banner = [
+        r"                _        ",
+        r"   _____  _____(_)_ __   ",
+        r"  / _ \ \/ / _ \ | '_ \  ",
+        r" |  __/>  <  __/ | | | | ",
+        r"  \___/_/\_\___|_|_| |_| ",
+    ];
+    for line in &banner {
+        eprintln!("  {}", style(line).cyan().bold());
+    }
+    eprintln!("  {} {}", style(" analyzer").dim(), style(format!("v{}", env!("CARGO_PKG_VERSION"))).dim());
+    eprintln!();
+    eprintln!(
+        "  {}",
+        style(format!("Configuring profile '{profile_name}'")).dim()
+    );
+    eprintln!();
 
     let api_key = prompt_api_key()?;
 
@@ -24,12 +41,13 @@ pub async fn run_login(url: Option<&str>, profile_name: Option<&str>) -> Result<
         .unwrap_or_else(|| "https://analyzer.exein.io/api/".to_string());
 
     // Validate
-    output::status("Validating", "Checking API key...");
+    eprintln!();
+    output::status("", "Validating API key...");
     let parsed_url: url::Url = url.parse()?;
     let client = AnalyzerClient::new(parsed_url, &api_key)?;
 
     match client.health().await {
-        Ok(_) => output::success("API key is valid!"),
+        Ok(_) => output::success("Key accepted. You're in."),
         Err(e) => output::warning(&format!(
             "Could not validate key ({e}). Saving anyway — the server may be unreachable."
         )),
@@ -42,12 +60,28 @@ pub async fn run_login(url: Option<&str>, profile_name: Option<&str>) -> Result<
     config.save()?;
 
     let path = ConfigFile::path()?;
-    output::success(&format!("Saved to {}", path.display()));
+    output::success(&format!("Config saved to {}", path.display()));
+    eprintln!();
     eprintln!(
-        "\n  You're all set! Try:\n    {} {}",
+        "  {} Ready to hunt some vulns. Try:",
+        style(">").green().bold()
+    );
+    eprintln!(
+        "    {} {}       # list your objects",
         style("analyzer").bold(),
         style("object list").cyan()
     );
+    eprintln!(
+        "    {} {}        # available scan types",
+        style("analyzer").bold(),
+        style("scan types").cyan()
+    );
+    eprintln!(
+        "    {} {}  # start a scan",
+        style("analyzer").bold(),
+        style("scan new -h").cyan()
+    );
+    eprintln!();
 
     Ok(())
 }
