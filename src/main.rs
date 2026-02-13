@@ -139,6 +139,9 @@ enum ObjectCommand {
 
 #[derive(Subcommand)]
 enum ScanCommand {
+    /// List all scans.
+    List,
+
     /// Create a new scan.
     New {
         /// Object ID to scan against.
@@ -254,6 +257,33 @@ enum ScanCommand {
         timeout: Duration,
     },
 
+    /// Show results for a specific analysis.
+    Show {
+        /// Scan UUID.
+        #[arg(short, long = "scan")]
+        scan_id: Uuid,
+
+        /// Analysis name (e.g. cve, malware, info).
+        #[arg(short, long = "analysis")]
+        analysis: String,
+
+        /// Page number.
+        #[arg(long, default_value_t = 1)]
+        page: u32,
+
+        /// Results per page.
+        #[arg(long, default_value_t = 20)]
+        per_page: u32,
+
+        /// Field to sort results by.
+        #[arg(long, default_value = "severity")]
+        sort_by: String,
+
+        /// Sort order (asc or desc).
+        #[arg(long, default_value = "desc")]
+        sort_ord: String,
+    },
+
     /// List available scan types and analysis options.
     Types,
 }
@@ -325,6 +355,7 @@ async fn run(cli: Cli) -> Result<()> {
         Command::Scan(cmd) => {
             let client = make_client(api_key.as_deref(), url.as_deref(), profile.as_deref())?;
             match cmd {
+                ScanCommand::List => commands::scan::run_list(&client, format).await,
                 ScanCommand::New {
                     object_id,
                     file,
@@ -370,6 +401,19 @@ async fn run(cli: Cli) -> Result<()> {
                 } => {
                     commands::scan::run_cra_report(
                         &client, scan_id, output, wait, interval, timeout,
+                    )
+                    .await
+                }
+                ScanCommand::Show {
+                    scan_id,
+                    analysis,
+                    page,
+                    per_page,
+                    sort_by,
+                    sort_ord,
+                } => {
+                    commands::scan::run_show(
+                        &client, scan_id, &analysis, page, per_page, &sort_by, &sort_ord, format,
                     )
                     .await
                 }

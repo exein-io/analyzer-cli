@@ -81,7 +81,6 @@ impl AnalyzerClient {
 
     // -- Scans ----------------------------------------------------------------
 
-    #[allow(dead_code)]
     pub async fn list_scans(&self) -> Result<Vec<Scan>> {
         let url = self.base_url.join("scans/")?;
         let resp = self.client.get(url).send().await?;
@@ -176,6 +175,32 @@ impl AnalyzerClient {
     pub async fn get_scan_types(&self) -> Result<Vec<ApiScanType>> {
         let url = self.base_url.join("scans/types")?;
         let resp = self.client.get(url).send().await?;
+        Self::json(resp).await
+    }
+
+    pub async fn get_analysis_results(
+        &self,
+        scan_id: Uuid,
+        analysis_id: Uuid,
+        page: u32,
+        per_page: u32,
+        sort_by: &str,
+        sort_ord: &str,
+    ) -> Result<serde_json::Value> {
+        let url = self
+            .base_url
+            .join(&format!("scans/{scan_id}/results/{analysis_id}"))?;
+        let resp = self
+            .client
+            .get(url)
+            .query(&[
+                ("page", page.to_string()),
+                ("per-page", per_page.to_string()),
+                ("sort-by", sort_by.to_string()),
+                ("sort-ord", sort_ord.to_string()),
+            ])
+            .send()
+            .await?;
         Self::json(resp).await
     }
 

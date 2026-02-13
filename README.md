@@ -54,11 +54,14 @@ analyzer scan new \
 #    Uploading firmware.bin  [=====================>] 100% (42 MB)
 #    OK Scan completed successfully!
 
-# 4. Download the report
+# 4. View CVE results
+analyzer scan show --scan e5f6g7h8-... --analysis cve
+
+# 5. Download the report
 analyzer scan report --scan e5f6g7h8-... --output report.pdf
 #    OK Report saved to report.pdf
 
-# 5. Download the SBOM
+# 6. Download the SBOM
 analyzer scan sbom --scan e5f6g7h8-... --output sbom.json
 #    OK SBOM saved to sbom.json
 ```
@@ -103,11 +106,18 @@ analyzer scan new -o <OBJECT_ID> -f firmware.bin -t linux -a info cve software-b
 # Create a scan and wait for completion
 analyzer scan new -o <OBJECT_ID> -f image.tar -t docker -a info cve malware --wait
 
+# List all scans
+analyzer scan list
+
 # Check scan status
 analyzer scan status --scan <SCAN_ID>
 
 # View the security score
 analyzer scan score --scan <SCAN_ID>
+
+# Show analysis results (e.g. cve, malware, hardening)
+analyzer scan show --scan <SCAN_ID> --analysis cve
+analyzer scan show --scan <SCAN_ID> --analysis hardening --page 2 --per-page 50
 
 # Download PDF report (waits for completion)
 analyzer scan report --scan <SCAN_ID> --output report.pdf --wait

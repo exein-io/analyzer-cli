@@ -11,8 +11,51 @@ use uuid::Uuid;
 use crate::client::AnalyzerClient;
 use crate::client::models::{AnalysisStatus, AnalysisStatusEntry, ScanTypeRequest};
 use crate::output::{
-    self, Format, format_score, format_status, score_cell, status_cell, styled_table,
+    self, Format, format_score, format_status, score_cell, severity_cell, status_cell, styled_table,
 };
+
+/// List all scans.
+pub async fn run_list(client: &AnalyzerClient, format: Format) -> Result<()> {
+    let scans = client.list_scans().await?;
+
+    match format {
+        Format::Json => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::to_value(&scans)?)?
+            );
+        }
+        Format::Human | Format::Table => {
+            if scans.is_empty() {
+                output::status("Scans", "None found. Create one with: analyzer scan new");
+                return Ok(());
+            }
+
+            let mut table = styled_table();
+            table.set_header(vec!["ID", "File", "Type", "Score", "Created"]);
+            // Prevent the ID column from wrapping so UUIDs stay on one line.
+            if let Some(col) = table.column_mut(0) {
+                col.set_constraint(comfy_table::ColumnConstraint::ContentWidth);
+            }
+
+            for scan in &scans {
+                let score = scan.score.as_ref().and_then(|s| s.score);
+
+                table.add_row(vec![
+                    comfy_table::Cell::new(scan.id),
+                    comfy_table::Cell::new(&scan.image.file_name),
+                    comfy_table::Cell::new(scan.image_type.as_deref().unwrap_or("-")),
+                    score_cell(score),
+                    comfy_table::Cell::new(scan.created.format("%Y-%m-%d %H:%M")),
+                ]);
+            }
+
+            println!("{table}");
+            output::status("Total", &format!("{} scan(s)", scans.len()));
+        }
+    }
+    Ok(())
+}
 
 /// Create a new scan.
 #[allow(clippy::too_many_arguments)]
@@ -198,6 +241,121 @@ pub async fn run_types(client: &AnalyzerClient, format: Format) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Show results for a specific analysis within a scan.
+#[allow(clippy::too_many_arguments)]
+pub async fn run_show(
+    client: &AnalyzerClient,
+    scan_id: Uuid,
+    analysis: &str,
+    page: u32,
+    per_page: u32,
+    sort_by: &str,
+    sort_ord: &str,
+    format: Format,
+) -> Result<()> {
+    // Resolve the analysis name to its UUID via the scan status.
+    let status = client.get_scan_status(scan_id).await?;
+    let entry_value = status.analyses.get(analysis).ok_or_else(|| {
+        let available: Vec<&String> = status.analyses.keys().collect();
+        anyhow::anyhow!(
+            "analysis '{}' not found in scan. Available: {}",
+            analysis,
+            available
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    })?;
+    let entry: crate::client::models::AnalysisStatusEntry =
+        serde_json::from_value(entry_value.clone())?;
+
+    let results = client
+        .get_analysis_results(scan_id, entry.id, page, per_page, sort_by, sort_ord)
+        .await?;
+
+    match format {
+        Format::Json => {
+            println!("{}", serde_json::to_string_pretty(&results)?);
+        }
+        Format::Human | Format::Table => {
+            // The API returns { "findings": [...], "filters": {...} }.
+            // Extract the findings array for table rendering.
+            let items = results
+                .get("findings")
+                .and_then(|v| v.as_array())
+                .or_else(|| results.as_array());
+
+            match items {
+                Some(arr) if !arr.is_empty() => {
+                    if let Some(first) = arr.first().and_then(|v| v.as_object()) {
+                        let columns = build_columns(first);
+
+                        let mut table = styled_table();
+                        table.set_header(&columns);
+
+                        for item in arr {
+                            if let Some(obj) = item.as_object() {
+                                let row: Vec<comfy_table::Cell> = columns
+                                    .iter()
+                                    .map(|col| {
+                                        let text = match obj.get(col) {
+                                            Some(serde_json::Value::String(s)) => s.clone(),
+                                            Some(serde_json::Value::Null) => "-".to_string(),
+                                            Some(v) => v.to_string(),
+                                            None => "-".to_string(),
+                                        };
+                                        style_cell(col, text)
+                                    })
+                                    .collect();
+                                table.add_row(row);
+                            }
+                        }
+
+                        println!("{table}");
+                        output::status("Total", &format!("{} result(s)", arr.len()));
+                    } else {
+                        println!("{}", serde_json::to_string_pretty(&results)?);
+                    }
+                }
+                Some(_) => {
+                    output::status("Results", "No results found for this analysis.");
+                }
+                None => {
+                    println!("{}", serde_json::to_string_pretty(&results)?);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+// TODO: each analysis type should have its own column layout (ordering, hidden
+// fields, primary field after severity, etc.) instead of using a generic renderer.
+
+/// Build column list: severity first (if present), then the rest.
+fn build_columns(first: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
+    let mut cols = Vec::with_capacity(first.len());
+    if first.contains_key("severity") {
+        cols.push("severity".to_string());
+    }
+    for key in first.keys() {
+        if key != "severity" {
+            cols.push(key.clone());
+        }
+    }
+    cols
+}
+
+/// Style a cell: severity gets colour + bold, everything else plain.
+fn style_cell(col: &str, text: String) -> comfy_table::Cell {
+    if col == "severity" {
+        severity_cell(&text).add_attribute(comfy_table::Attribute::Bold)
+    } else {
+        comfy_table::Cell::new(text)
+    }
 }
 
 // ---------------------------------------------------------------------------

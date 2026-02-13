@@ -88,3 +88,15 @@ pub fn status_cell(status: &str) -> Cell {
         other => Cell::new(other),
     }
 }
+
+/// Return a comfy_table Cell for a severity level with colour coding.
+pub fn severity_cell(severity: &str) -> Cell {
+    match severity.to_uppercase().as_str() {
+        "CRITICAL" => Cell::new(severity).fg(Color::Magenta),
+        "HIGH" => Cell::new(severity).fg(Color::Red),
+        "MEDIUM" => Cell::new(severity).fg(Color::Yellow),
+        "LOW" => Cell::new(severity).fg(Color::Green),
+        "NONE" | "INFO" => Cell::new(severity).fg(Color::DarkGrey),
+        _ => Cell::new(severity),
+    }
+}
