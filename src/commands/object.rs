@@ -30,6 +30,11 @@ pub async fn run_list(client: &AnalyzerClient, format: Format) -> Result<()> {
 
             let mut table = styled_table();
             table.set_header(vec!["ID", "Name", "Description", "Score", "Tags"]);
+            // Prevent the ID column from wrapping so UUIDs stay on one line
+            // and remain easy to copy/paste.
+            if let Some(col) = table.column_mut(0) {
+                col.set_constraint(comfy_table::ColumnConstraint::ContentWidth);
+            }
 
             for obj in &objects {
                 let score = obj
