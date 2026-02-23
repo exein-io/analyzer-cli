@@ -1,11 +1,12 @@
 //! Object management commands.
 
 use anyhow::Result;
+use console::style;
 use uuid::Uuid;
 
 use crate::client::AnalyzerClient;
 use crate::client::models::CreateObject;
-use crate::output::{self, Format, score_cell, styled_table};
+use crate::output::{self, Format};
 
 /// List all objects.
 pub async fn run_list(client: &AnalyzerClient, format: Format) -> Result<()> {
@@ -28,9 +29,14 @@ pub async fn run_list(client: &AnalyzerClient, format: Format) -> Result<()> {
                 return Ok(());
             }
 
-            let mut table = styled_table();
-            table.set_header(vec!["ID", "Name", "Description", "Score", "Tags"]);
-
+            eprintln!();
+            eprintln!(
+                "  {:<36}  {:<30}  {:<5}  {}",
+                style("ID").underlined(),
+                style("Name").underlined(),
+                style("Score").underlined(),
+                style("Description").underlined(),
+            );
             for obj in &objects {
                 let score = obj
                     .score
@@ -39,25 +45,51 @@ pub async fn run_list(client: &AnalyzerClient, format: Format) -> Result<()> {
                     .map(|s| s.value);
 
                 let tags = if obj.tags.is_empty() {
-                    "-".to_string()
+                    String::new()
                 } else {
-                    obj.tags.join(", ")
+                    obj.tags
+                        .iter()
+                        .map(|t| format!("[{}]", t))
+                        .collect::<Vec<_>>()
+                        .join(" ")
                 };
 
-                table.add_row(vec![
-                    comfy_table::Cell::new(obj.id),
-                    comfy_table::Cell::new(&obj.name),
-                    comfy_table::Cell::new(obj.description.as_deref().unwrap_or("-")),
-                    score_cell(score),
-                    comfy_table::Cell::new(tags),
-                ]);
+                let desc = truncate(obj.description.as_deref().unwrap_or(""), 50);
+
+                let score_str = match score {
+                    Some(s) => format!("{:<5}", s),
+                    None => format!("{:<5}", "--"),
+                };
+                eprintln!(
+                    "  {}  {:<30}  {}  {}",
+                    style(obj.id).cyan(),
+                    truncate(&obj.name, 30),
+                    match score {
+                        Some(s) if s >= 80 => style(score_str).green(),
+                        Some(s) if s >= 50 => style(score_str).yellow(),
+                        Some(_) => style(score_str).red(),
+                        None => style(score_str).dim(),
+                    },
+                    desc,
+                );
+                if !tags.is_empty() {
+                    eprintln!("  {:<36}  {}", "", style(&tags).cyan());
+                }
             }
 
-            println!("{table}");
+            eprintln!();
             output::status("Total", &format!("{} object(s)", objects.len()));
         }
     }
     Ok(())
+}
+
+fn truncate(s: &str, max: usize) -> String {
+    if s.len() > max {
+        format!("{}...", &s[..max - 3])
+    } else {
+        s.to_string()
+    }
 }
 
 /// Create a new object.

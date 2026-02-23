@@ -17,6 +17,7 @@ use clap::{Parser, Subcommand};
 use uuid::Uuid;
 
 use crate::client::AnalyzerClient;
+use crate::client::models::{AnalysisType, ComplianceType};
 use crate::output::Format;
 
 /// Exein Analyzer CLI — firmware & container security scanning.
@@ -186,25 +187,34 @@ enum ScanCommand {
     /// Show scan status.
     Status {
         /// Scan UUID.
-        #[arg(short, long = "scan")]
-        scan_id: Uuid,
+        #[arg(short, long = "scan", required_unless_present = "object_id")]
+        scan_id: Option<Uuid>,
+        /// Object UUID (uses the object's last scan).
+        #[arg(short, long = "object", required_unless_present = "scan_id")]
+        object_id: Option<Uuid>,
     },
 
     /// Show the security score.
     Score {
         /// Scan UUID.
-        #[arg(short, long = "scan")]
-        scan_id: Uuid,
+        #[arg(short, long = "scan", required_unless_present = "object_id")]
+        scan_id: Option<Uuid>,
+        /// Object UUID (uses the object's last scan).
+        #[arg(short, long = "object", required_unless_present = "scan_id")]
+        object_id: Option<Uuid>,
     },
 
     /// Download the PDF report.
     Report {
         /// Scan UUID.
-        #[arg(short, long = "scan")]
-        scan_id: Uuid,
+        #[arg(short, long = "scan", required_unless_present = "object_id")]
+        scan_id: Option<Uuid>,
+        /// Object UUID (uses the object's last scan).
+        #[arg(short, long = "object", required_unless_present = "scan_id")]
+        object_id: Option<Uuid>,
 
         /// Output file path.
-        #[arg(short, long)]
+        #[arg(short = 'O', long)]
         output: PathBuf,
 
         /// Wait for scan completion first.
@@ -223,22 +233,32 @@ enum ScanCommand {
     /// Download the SBOM (CycloneDX JSON).
     Sbom {
         /// Scan UUID.
-        #[arg(short, long = "scan")]
-        scan_id: Uuid,
+        #[arg(short, long = "scan", required_unless_present = "object_id")]
+        scan_id: Option<Uuid>,
+        /// Object UUID (uses the object's last scan).
+        #[arg(short, long = "object", required_unless_present = "scan_id")]
+        object_id: Option<Uuid>,
 
         /// Output file path.
-        #[arg(short, long)]
+        #[arg(short = 'O', long)]
         output: PathBuf,
     },
 
-    /// Download the CRA compliance report (PDF).
-    CraReport {
+    /// Download a compliance report (PDF).
+    ComplianceReport {
         /// Scan UUID.
-        #[arg(short, long = "scan")]
-        scan_id: Uuid,
+        #[arg(short, long = "scan", required_unless_present = "object_id")]
+        scan_id: Option<Uuid>,
+        /// Object UUID (uses the object's last scan).
+        #[arg(short, long = "object", required_unless_present = "scan_id")]
+        object_id: Option<Uuid>,
+
+        /// Compliance standard.
+        #[arg(short = 't', long = "type")]
+        compliance_type: ComplianceType,
 
         /// Output file path.
-        #[arg(short, long)]
+        #[arg(short = 'O', long)]
         output: PathBuf,
 
         /// Wait for scan completion first.
@@ -256,6 +276,56 @@ enum ScanCommand {
 
     /// List available scan types and analysis options.
     Types,
+
+    /// Show scan overview (summary of all analyses).
+    Overview {
+        /// Scan UUID.
+        #[arg(short, long = "scan", required_unless_present = "object_id")]
+        scan_id: Option<Uuid>,
+        /// Object UUID (uses the object's last scan).
+        #[arg(short, long = "object", required_unless_present = "scan_id")]
+        object_id: Option<Uuid>,
+    },
+
+    /// Browse analysis results (CVEs, malware, hardening, etc.).
+    Results {
+        /// Scan UUID.
+        #[arg(short, long = "scan", required_unless_present = "object_id")]
+        scan_id: Option<Uuid>,
+        /// Object UUID (uses the object's last scan).
+        #[arg(short, long = "object", required_unless_present = "scan_id")]
+        object_id: Option<Uuid>,
+
+        /// Analysis type to view.
+        #[arg(short, long = "analysis")]
+        analysis: AnalysisType,
+
+        /// Page number (default: 1).
+        #[arg(long)]
+        page: Option<u32>,
+
+        /// Results per page (default: 25).
+        #[arg(long)]
+        per_page: Option<u32>,
+
+        /// Search / filter string.
+        #[arg(long)]
+        search: Option<String>,
+    },
+
+    /// Show compliance check results.
+    Compliance {
+        /// Scan UUID.
+        #[arg(short, long = "scan", required_unless_present = "object_id")]
+        scan_id: Option<Uuid>,
+        /// Object UUID (uses the object's last scan).
+        #[arg(short, long = "object", required_unless_present = "scan_id")]
+        object_id: Option<Uuid>,
+
+        /// Compliance standard.
+        #[arg(short = 't', long = "type")]
+        compliance_type: ComplianceType,
+    },
 }
 
 // =============================================================================
@@ -342,38 +412,75 @@ async fn run(cli: Cli) -> Result<()> {
                 }
                 ScanCommand::Delete { id } => commands::scan::run_delete(&client, id).await,
                 ScanCommand::Cancel { id } => commands::scan::run_cancel(&client, id).await,
-                ScanCommand::Status { scan_id } => {
-                    commands::scan::run_status(&client, scan_id, format).await
+                ScanCommand::Status { scan_id, object_id } => {
+                    let sid = commands::scan::resolve_scan_id(&client, scan_id, object_id).await?;
+                    commands::scan::run_status(&client, sid, format).await
                 }
-                ScanCommand::Score { scan_id } => {
-                    commands::scan::run_score(&client, scan_id, format).await
+                ScanCommand::Score { scan_id, object_id } => {
+                    let sid = commands::scan::resolve_scan_id(&client, scan_id, object_id).await?;
+                    commands::scan::run_score(&client, sid, format).await
                 }
                 ScanCommand::Report {
                     scan_id,
+                    object_id,
                     output,
                     wait,
                     interval,
                     timeout,
                 } => {
-                    commands::scan::run_report(&client, scan_id, output, wait, interval, timeout)
-                        .await
+                    let sid = commands::scan::resolve_scan_id(&client, scan_id, object_id).await?;
+                    commands::scan::run_report(&client, sid, output, wait, interval, timeout).await
                 }
-                ScanCommand::Sbom { scan_id, output } => {
-                    commands::scan::run_sbom(&client, scan_id, output).await
-                }
-                ScanCommand::CraReport {
+                ScanCommand::Sbom {
                     scan_id,
+                    object_id,
+                    output,
+                } => {
+                    let sid = commands::scan::resolve_scan_id(&client, scan_id, object_id).await?;
+                    commands::scan::run_sbom(&client, sid, output).await
+                }
+                ScanCommand::ComplianceReport {
+                    scan_id,
+                    object_id,
+                    compliance_type,
                     output,
                     wait,
                     interval,
                     timeout,
                 } => {
-                    commands::scan::run_cra_report(
-                        &client, scan_id, output, wait, interval, timeout,
+                    let sid = commands::scan::resolve_scan_id(&client, scan_id, object_id).await?;
+                    commands::scan::run_compliance_report(
+                        &client, sid, compliance_type, output, wait, interval, timeout,
                     )
                     .await
                 }
                 ScanCommand::Types => commands::scan::run_types(&client, format).await,
+                ScanCommand::Overview { scan_id, object_id } => {
+                    let sid = commands::scan::resolve_scan_id(&client, scan_id, object_id).await?;
+                    commands::scan::run_overview(&client, sid, format).await
+                }
+                ScanCommand::Results {
+                    scan_id,
+                    object_id,
+                    analysis,
+                    page,
+                    per_page,
+                    search,
+                } => {
+                    let sid = commands::scan::resolve_scan_id(&client, scan_id, object_id).await?;
+                    commands::scan::run_results(
+                        &client, sid, analysis, page, per_page, search, format,
+                    )
+                    .await
+                }
+                ScanCommand::Compliance {
+                    scan_id,
+                    object_id,
+                    compliance_type,
+                } => {
+                    let sid = commands::scan::resolve_scan_id(&client, scan_id, object_id).await?;
+                    commands::scan::run_compliance(&client, sid, compliance_type, format).await
+                }
             }
         }
     }

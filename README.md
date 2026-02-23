@@ -2,7 +2,7 @@
 
 A command-line interface for [Exein Analyzer](https://analyzer.exein.io) -- firmware & container security scanning.
 
-Scan firmware images for CVEs, generate SBOMs, check CRA compliance, and more. All from your terminal.
+Scan firmware images for CVEs, generate SBOMs, check compliance, browse analysis results, and more. All from your terminal.
 
 ## Install
 
@@ -54,12 +54,24 @@ analyzer scan new \
 #    Uploading firmware.bin  [=====================>] 100% (42 MB)
 #    OK Scan completed successfully!
 
-# 4. Download the report
-analyzer scan report --scan e5f6g7h8-... --output report.pdf
+# 4. View the scan overview
+analyzer scan overview --object a1b2c3d4-...
+#    Shows a summary of all analyses with finding counts by severity
+
+# 5. Browse CVE results
+analyzer scan results --object a1b2c3d4-... --analysis cve
+#    Paginated table of CVEs with severity, score, and affected package
+
+# 6. Check CRA compliance
+analyzer scan compliance --type cra --object a1b2c3d4-...
+#    Shows pass/fail status for each CRA requirement
+
+# 7. Download the report
+analyzer scan report --object a1b2c3d4-... -O report.pdf
 #    OK Report saved to report.pdf
 
-# 5. Download the SBOM
-analyzer scan sbom --scan e5f6g7h8-... --output sbom.json
+# 8. Download the SBOM
+analyzer scan sbom --object a1b2c3d4-... -O sbom.json
 #    OK SBOM saved to sbom.json
 ```
 
@@ -96,6 +108,8 @@ analyzer object delete <UUID>
 
 ### Scans
 
+#### Creating and managing scans
+
 ```bash
 # Create a scan (returns immediately)
 analyzer scan new -o <OBJECT_ID> -f firmware.bin -t linux -a info cve software-bom
@@ -109,15 +123,6 @@ analyzer scan status --scan <SCAN_ID>
 # View the security score
 analyzer scan score --scan <SCAN_ID>
 
-# Download PDF report (waits for completion)
-analyzer scan report --scan <SCAN_ID> --output report.pdf --wait
-
-# Download SBOM
-analyzer scan sbom --scan <SCAN_ID> --output sbom.json
-
-# Download CRA compliance report
-analyzer scan cra-report --scan <SCAN_ID> --output cra.pdf --wait
-
 # List available scan types and analyses
 analyzer scan types
 
@@ -127,6 +132,68 @@ analyzer scan cancel <SCAN_ID>
 # Delete a scan
 analyzer scan delete <SCAN_ID>
 ```
+
+#### Browsing analysis results
+
+```bash
+# View scan overview (summary of all analyses with finding counts)
+analyzer scan overview --scan <SCAN_ID>
+
+# Browse results for a specific analysis type
+analyzer scan results --scan <SCAN_ID> --analysis cve
+analyzer scan results --scan <SCAN_ID> --analysis malware
+analyzer scan results --scan <SCAN_ID> --analysis hardening
+
+# Paginate through results
+analyzer scan results --scan <SCAN_ID> --analysis cve --page 2 --per-page 50
+
+# Search / filter results
+analyzer scan results --scan <SCAN_ID> --analysis cve --search "openssl"
+
+# View compliance check results
+analyzer scan compliance --type cra --scan <SCAN_ID>
+```
+
+Supported `--analysis` types: `cve`, `password-hash`, `malware`, `hardening`, `capabilities`, `crypto`, `software-bom`, `kernel`, `info`, `symbols`, `tasks`, `stack-overflow`.
+
+Supported `--type` compliance standards: `cra` (Cyber Resilience Act).
+
+#### Downloading reports and artifacts
+
+```bash
+# Download PDF report (waits for completion)
+analyzer scan report --scan <SCAN_ID> -O report.pdf --wait
+
+# Download SBOM
+analyzer scan sbom --scan <SCAN_ID> -O sbom.json
+
+# Download compliance report
+analyzer scan compliance-report --type cra --scan <SCAN_ID> -O cra.pdf --wait
+```
+
+### Using `--object` instead of `--scan`
+
+All scan commands that accept `--scan <SCAN_ID>` also accept `--object <OBJECT_ID>`. When `--object` is used, the CLI automatically resolves the object's most recent scan and uses that.
+
+This simplifies the common workflow: instead of finding a scan ID from the object, you can go straight from object to results.
+
+```bash
+# These are equivalent (assuming the object's last scan is e5f6g7h8-...)
+analyzer scan overview --scan e5f6g7h8-...
+analyzer scan overview --object a1b2c3d4-...
+
+# Works with all scan commands
+analyzer scan status   --object <OBJECT_ID>
+analyzer scan score    --object <OBJECT_ID>
+analyzer scan overview --object <OBJECT_ID>
+analyzer scan results  --object <OBJECT_ID> --analysis cve
+analyzer scan compliance --type cra --object <OBJECT_ID>
+analyzer scan report   --object <OBJECT_ID> -O report.pdf
+analyzer scan sbom     --object <OBJECT_ID> -O sbom.json
+analyzer scan compliance-report --type cra --object <OBJECT_ID> -O cra.pdf
+```
+
+Short flags are also available: `-s` for `--scan`, `-o` for `--object`.
 
 ### Configuration
 
@@ -156,6 +223,8 @@ analyzer object list --format json
 
 # Pipe into jq
 analyzer scan status --scan <ID> --format json | jq '.status'
+analyzer scan overview --object <ID> --format json | jq '.analyses'
+analyzer scan results --object <ID> --analysis cve --format json | jq '.findings'
 ```
 
 ### Shell completions

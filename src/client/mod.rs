@@ -60,7 +60,6 @@ impl AnalyzerClient {
         Self::json(resp).await
     }
 
-    #[allow(dead_code)]
     pub async fn get_object(&self, id: Uuid) -> Result<Object> {
         let url = self.base_url.join(&format!("objects/{id}"))?;
         let resp = self.client.get(url).send().await?;
@@ -88,7 +87,6 @@ impl AnalyzerClient {
         Self::json(resp).await
     }
 
-    #[allow(dead_code)]
     pub async fn get_scan(&self, id: Uuid) -> Result<Scan> {
         let url = self.base_url.join(&format!("scans/{id}"))?;
         let resp = self.client.get(url).send().await?;
@@ -191,9 +189,56 @@ impl AnalyzerClient {
         Self::bytes(resp).await
     }
 
-    pub async fn download_cra_report(&self, scan_id: Uuid) -> Result<bytes::Bytes> {
+    // -- Analysis Results & Compliance ----------------------------------------
+
+    pub async fn get_scan_overview(&self, scan_id: Uuid) -> Result<ScanOverview> {
+        let url = self.base_url.join(&format!("scans/{scan_id}/overview"))?;
+        let resp = self.client.get(url).send().await?;
+        Self::json(resp).await
+    }
+
+    pub async fn get_analysis_results(
+        &self,
+        scan_id: Uuid,
+        analysis_id: Uuid,
+        query: &ResultsQuery,
+    ) -> Result<AnalysisResults> {
+        let mut url = self
+            .base_url
+            .join(&format!("scans/{scan_id}/results/{analysis_id}"))?;
+        url.query_pairs_mut()
+            .append_pair("page", &query.page.to_string())
+            .append_pair("per-page", &query.per_page.to_string())
+            .append_pair("sort-by", &query.sort_by)
+            .append_pair("sort-ord", &query.sort_ord);
+        if let Some(search) = &query.search {
+            url.query_pairs_mut().append_pair("search", search);
+        }
+        let resp = self.client.get(url).send().await?;
+        Self::json(resp).await
+    }
+
+    pub async fn get_compliance(
+        &self,
+        scan_id: Uuid,
+        ct: ComplianceType,
+    ) -> Result<ComplianceReport> {
         let url = self.base_url.join(&format!(
-            "scans/{scan_id}/compliance-check/cyber-resilience-act/report"
+            "scans/{scan_id}/compliance-check/{}",
+            ct.api_slug()
+        ))?;
+        let resp = self.client.get(url).send().await?;
+        Self::json(resp).await
+    }
+
+    pub async fn download_compliance_report(
+        &self,
+        scan_id: Uuid,
+        ct: ComplianceType,
+    ) -> Result<bytes::Bytes> {
+        let url = self.base_url.join(&format!(
+            "scans/{scan_id}/compliance-check/{}/report",
+            ct.api_slug()
         ))?;
         let resp = self.client.get(url).send().await?;
         Self::bytes(resp).await
