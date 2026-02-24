@@ -564,11 +564,12 @@ pub async fn run_results(
 fn render_cve_table(values: &[&serde_json::Value]) -> Result<()> {
     eprintln!();
     eprintln!(
-        "  {:<8}  {:<15}  {:<5}  {:<14}  {}",
+        "  {:<8}  {:<15}  {:<5}  {:<14}  {:<20}  {}",
         style("Severity").underlined(),
         style("CVE ID").underlined(),
         style("Score").underlined(),
         style("Vendor").underlined(),
+        style("Product").underlined(),
         style("Summary").underlined(),
     );
     for val in values {
@@ -581,6 +582,11 @@ fn render_cve_table(values: &[&serde_json::Value]) -> Result<()> {
                 .map(|s| format!("{s:.1}"))
                 .unwrap_or_default();
             let sev = format_severity(f.severity.as_deref().unwrap_or("unknown"), 8);
+            let product = f
+                .products
+                .first()
+                .and_then(|p| p.product.as_deref())
+                .unwrap_or("-");
             let summary = f.summary.as_deref().unwrap_or("");
             let summary_trunc = if summary.len() > 40 {
                 format!("{}...", &summary[..37])
@@ -588,11 +594,12 @@ fn render_cve_table(values: &[&serde_json::Value]) -> Result<()> {
                 summary.to_string()
             };
             eprintln!(
-                "  {}  {:<15}  {:<5}  {:<14}  {}",
+                "  {}  {:<15}  {:<5}  {:<14}  {:<20}  {}",
                 sev,
                 f.cveid.as_deref().unwrap_or("-"),
                 score_str,
                 truncate_str(f.vendor.as_deref().unwrap_or("-"), 14),
+                truncate_str(product, 20),
                 summary_trunc,
             );
         }
@@ -678,22 +685,17 @@ fn render_capabilities_table(values: &[&serde_json::Value]) -> Result<()> {
     eprintln!(
         "  {:<30}  {:<8}  {:<9}  {}",
         style("Filename").underlined(),
-        style("Risk").underlined(),
+        style("Severity").underlined(),
         style("Behaviors").underlined(),
         style("Syscalls").underlined(),
     );
     for val in values {
         if let Ok(f) = serde_json::from_value::<CapabilityFinding>((*val).clone()) {
-            let risk = f
-                .behaviors
-                .iter()
-                .filter_map(|b| b.risk_level.as_deref())
-                .max_by(|a, b| risk_ord(a).cmp(&risk_ord(b)))
-                .unwrap_or("none");
+            let sev = format_severity(f.level.as_deref().unwrap_or("unknown"), 8);
             eprintln!(
                 "  {:<30}  {}  {:<9}  {}",
                 truncate_str(f.filename.as_deref().unwrap_or("-"), 30),
-                format_severity(risk, 8),
+                sev,
                 f.behaviors.len(),
                 f.syscalls.len(),
             );
@@ -732,15 +734,6 @@ fn format_bool(val: bool, width: usize) -> String {
     }
 }
 
-fn risk_ord(level: &str) -> u8 {
-    match level.to_lowercase().as_str() {
-        "critical" => 4,
-        "high" => 3,
-        "medium" => 2,
-        "low" => 1,
-        _ => 0,
-    }
-}
 
 fn render_crypto_table(values: &[&serde_json::Value]) -> Result<()> {
     eprintln!();

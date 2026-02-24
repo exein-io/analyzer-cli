@@ -449,6 +449,8 @@ pub struct CapabilityFinding {
     #[serde(default)]
     pub filename: Option<String>,
     #[serde(default)]
+    pub level: Option<String>,
+    #[serde(default)]
     pub behaviors: Vec<CapabilityBehavior>,
     #[serde(default)]
     pub syscalls: Vec<String>,
