@@ -11,9 +11,8 @@ use uuid::Uuid;
 use crate::client::AnalyzerClient;
 use crate::client::models::{
     AnalysisStatus, AnalysisStatusEntry, AnalysisType, CapabilityFinding, ComplianceReport,
-    ComplianceType, CryptoFinding, CveFinding, HardeningFinding, IdfSymbolFinding,
-    IdfTaskFinding, KernelFinding, MalwareFinding, PasswordFinding, ResultsQuery, SbomComponent,
-    ScanTypeRequest,
+    ComplianceType, CryptoFinding, CveFinding, HardeningFinding, IdfSymbolFinding, IdfTaskFinding,
+    KernelFinding, MalwareFinding, PasswordFinding, ResultsQuery, SbomComponent, ScanTypeRequest,
 };
 use crate::output::{self, Format, format_score, format_status};
 
@@ -156,10 +155,17 @@ pub async fn run_compliance_report(
     if wait {
         wait_for_completion(client, scan_id, interval, timeout).await?;
     }
-    output::status("Downloading", &format!("{} compliance report...", ct.display_name()));
+    output::status(
+        "Downloading",
+        &format!("{} compliance report...", ct.display_name()),
+    );
     let bytes = client.download_compliance_report(scan_id, ct).await?;
     tokio::fs::write(&output_path, &bytes).await?;
-    output::success(&format!("{} report saved to {}", ct.display_name(), output_path.display()));
+    output::success(&format!(
+        "{} report saved to {}",
+        ct.display_name(),
+        output_path.display()
+    ));
     Ok(())
 }
 
@@ -728,12 +734,15 @@ fn truncate_str(s: &str, max: usize) -> String {
 /// Format a boolean as colored Yes/No with fixed-width padding.
 fn format_bool(val: bool, width: usize) -> String {
     if val {
-        style(format!("{:<width$}", "Yes", width = width)).green().to_string()
+        style(format!("{:<width$}", "Yes", width = width))
+            .green()
+            .to_string()
     } else {
-        style(format!("{:<width$}", "No", width = width)).red().to_string()
+        style(format!("{:<width$}", "No", width = width))
+            .red()
+            .to_string()
     }
 }
-
 
 fn render_crypto_table(values: &[&serde_json::Value]) -> Result<()> {
     eprintln!();
@@ -815,11 +824,7 @@ fn render_kernel_table(values: &[&serde_json::Value]) -> Result<()> {
                 style("Status").underlined(),
             );
             for feat in &f.features {
-                eprintln!(
-                    "  {:<40}  {}",
-                    feat.name,
-                    format_bool(feat.enabled, 8),
-                );
+                eprintln!("  {:<40}  {}", feat.name, format_bool(feat.enabled, 8),);
             }
         }
     }
@@ -962,9 +967,7 @@ fn format_compliance_status(status: &str, width: usize) -> String {
         "passed" => style(padded).green().to_string(),
         "failed" => style(padded).red().to_string(),
         "unknown" => style(padded).yellow().to_string(),
-        "not_applicable" | "not-applicable" | "notapplicable" => {
-            style(padded).dim().to_string()
-        }
+        "not_applicable" | "not-applicable" | "notapplicable" => style(padded).dim().to_string(),
         _ => padded,
     }
 }

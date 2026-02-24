@@ -450,7 +450,13 @@ async fn run(cli: Cli) -> Result<()> {
                 } => {
                     let sid = commands::scan::resolve_scan_id(&client, scan_id, object_id).await?;
                     commands::scan::run_compliance_report(
-                        &client, sid, compliance_type, output, wait, interval, timeout,
+                        &client,
+                        sid,
+                        compliance_type,
+                        output,
+                        wait,
+                        interval,
+                        timeout,
                     )
                     .await
                 }
