@@ -80,7 +80,7 @@ jobs:
         uses: dawidd6/action-homebrew-bump-formula@v4
         continue-on-error: true
         with:
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          token: ${{ secrets.EXEIN_TOOLS_SSH_PRIVATE_KEY }}
           tap: exein-io/tools
           formula: analyzer
           tag: ${{ github.ref_name }}
