@@ -3,7 +3,7 @@
 //! When the CLI is invoked with `--mcp`, this module runs an MCP server over
 //! stdio, exposing Analyzer operations as structured tools for AI assistants.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use rmcp::handler::server::router::tool::ToolRouter;
@@ -17,7 +17,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::client::AnalyzerClient;
-use crate::client::models::{ComplianceType, CreateObject, ResultsQuery, ScanTypeRequest};
+use crate::client::models::{AnalysisType, ComplianceType, CreateObject, ResultsQuery, ScanTypeRequest};
 use crate::config::ConfigFile;
 
 // ===========================================================================
@@ -53,24 +53,32 @@ struct CreateScanParams {
     analyses: Option<Vec<String>>,
 }
 
+/// Identifies a scan — either by scan UUID directly, or by object UUID
+/// (which resolves to the object's most recent scan).
 #[derive(Debug, Deserialize, JsonSchema)]
-struct ScanIdParam {
-    /// Scan UUID.
-    scan_id: String,
+struct ScanOrObjectParam {
+    /// Scan UUID. Provide either scan_id or object_id.
+    scan_id: Option<String>,
+    /// Object UUID — resolves to the object's most recent scan.
+    object_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
 struct DownloadParams {
-    /// Scan UUID.
-    scan_id: String,
+    /// Scan UUID. Provide either scan_id or object_id.
+    scan_id: Option<String>,
+    /// Object UUID — resolves to the object's most recent scan.
+    object_id: Option<String>,
     /// Output file path. If omitted, saves to ~/.cache/analyzer/downloads/<scan_id>/.
     output_path: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
 struct ComplianceDownloadParams {
-    /// Scan UUID.
-    scan_id: String,
+    /// Scan UUID. Provide either scan_id or object_id.
+    scan_id: Option<String>,
+    /// Object UUID — resolves to the object's most recent scan.
+    object_id: Option<String>,
     /// Compliance standard: "cra" (Cyber Resilience Act).
     compliance_type: String,
     /// Output file path. If omitted, saves to ~/.cache/analyzer/downloads/<scan_id>/.
@@ -79,16 +87,20 @@ struct ComplianceDownloadParams {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 struct ComplianceParams {
-    /// Scan UUID.
-    scan_id: String,
+    /// Scan UUID. Provide either scan_id or object_id.
+    scan_id: Option<String>,
+    /// Object UUID — resolves to the object's most recent scan.
+    object_id: Option<String>,
     /// Compliance standard: "cra" (Cyber Resilience Act).
     compliance_type: String,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
 struct AnalysisResultsParams {
-    /// Scan UUID.
-    scan_id: String,
+    /// Scan UUID. Provide either scan_id or object_id.
+    scan_id: Option<String>,
+    /// Object UUID — resolves to the object's most recent scan.
+    object_id: Option<String>,
     /// Analysis type: cve, password-hash, malware, hardening, capabilities, crypto,
     /// software-bom, kernel, info, symbols, tasks, stack-overflow.
     analysis_type: String,
@@ -98,34 +110,6 @@ struct AnalysisResultsParams {
     per_page: Option<u32>,
     /// Search / filter string.
     search: Option<String>,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-struct ConfigureProfileParams {
-    /// API key to save.
-    api_key: String,
-    /// Server URL (default: https://analyzer.exein.io/api/).
-    url: Option<String>,
-    /// Profile name (default: "default").
-    profile: Option<String>,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-struct ConfigGetParams {
-    /// Config key to read: "url", "api-key", or "default-profile".
-    key: String,
-    /// Profile to read from.
-    profile: Option<String>,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-struct ConfigSetParams {
-    /// Config key to set: "url", "api-key", or "default-profile".
-    key: String,
-    /// Value to set.
-    value: String,
-    /// Profile to modify.
-    profile: Option<String>,
 }
 
 // ===========================================================================
@@ -153,7 +137,7 @@ impl AnalyzerMcp {
 
     // -- Object tools ---------------------------------------------------------
 
-    #[tool(description = "List all objects (devices/products) in your Analyzer account. Returns JSON array with id, name, description, tags, score (current and previous Exein Rating), and last scan info.")]
+    #[tool(description = "[Read] List all objects (devices/products) in your Analyzer account. Returns JSON array with id, name, description, tags, score (current and previous Exein Rating), and last scan info.")]
     async fn list_objects(&self) -> Result<CallToolResult, McpError> {
         match self.client.list_objects().await {
             Ok(page) => ok_json(&page.data),
@@ -161,7 +145,7 @@ impl AnalyzerMcp {
         }
     }
 
-    #[tool(description = "Create a new object (device / product).")]
+    #[tool(description = "[Write] Create a new object (device / product).")]
     async fn create_object(
         &self,
         Parameters(p): Parameters<CreateObjectParams>,
@@ -177,7 +161,7 @@ impl AnalyzerMcp {
         }
     }
 
-    #[tool(description = "Delete an object by its UUID.")]
+    #[tool(description = "[Critical] Delete an object by its UUID. This permanently removes the object and all associated scans.")]
     async fn delete_object(
         &self,
         Parameters(p): Parameters<ObjectIdParam>,
@@ -192,7 +176,7 @@ impl AnalyzerMcp {
     // -- Scan tools -----------------------------------------------------------
 
     #[tool(
-        description = "Create a new firmware/container scan. Uploads the image file and starts analysis. Returns the scan UUID. Image types: 'linux' (firmware), 'docker' (containers), 'idf' (ESP-IDF). If analyses are omitted, all defaults for the scan type are run. After creation, poll get_scan_status until completion (typically 1-10 min)."
+        description = "[Write] Create a new firmware/container scan. Uploads the image file and starts analysis. Returns the scan UUID. Image types: 'linux' (firmware), 'docker' (containers), 'idf' (ESP-IDF). If analyses are omitted, all defaults for the scan type are run. After creation, poll get_scan_status until completion (typically 1-10 min)."
     )]
     async fn create_scan(
         &self,
@@ -235,24 +219,24 @@ impl AnalyzerMcp {
         }
     }
 
-    #[tool(description = "Get the current status of a scan and its individual analyses. Each analysis has a status: 'pending' (queued), 'in-progress' (running), 'success' (done), 'error' (failed), 'canceled'. The overall scan status reflects the aggregate. Poll this until all analyses reach a terminal state (success/error/canceled).")]
+    #[tool(description = "[Read] Get the current status of a scan and its individual analyses. Each analysis has a status: 'pending' (queued), 'in-progress' (running), 'success' (done), 'error' (failed), 'canceled'. The overall scan status reflects the aggregate. Poll this until all analyses reach a terminal state (success/error/canceled). Accepts scan_id or object_id (resolves to most recent scan).")]
     async fn get_scan_status(
         &self,
-        Parameters(p): Parameters<ScanIdParam>,
+        Parameters(p): Parameters<ScanOrObjectParam>,
     ) -> Result<CallToolResult, McpError> {
-        let id = parse_uuid(&p.scan_id)?;
+        let id = resolve_scan(&self.client, p.scan_id.as_deref(), p.object_id.as_deref()).await?;
         match self.client.get_scan_status(id).await {
             Ok(status) => ok_json(&status),
             Err(e) => ok_err(e),
         }
     }
 
-    #[tool(description = "Get the Exein Rating (security score) for a completed scan. Score is 0-100 where LOWER IS BETTER: 0 = no issues (best), 100 = worst. Returns overall score plus per-analysis breakdown (cve, hardening, kernel, malware, password-hash, capabilities). A score of 0 means clean/no issues found. Use this to identify which areas need improvement — higher scores indicate worse security posture.")]
+    #[tool(description = "[Read] Get the Exein Rating (security score) for a completed scan. Score is 0-100 where LOWER IS BETTER: 0 = no issues (best), 100 = worst. Returns overall score plus per-analysis breakdown (cve, hardening, kernel, malware, password-hash, capabilities). A score of 0 means clean/no issues found. Accepts scan_id or object_id.")]
     async fn get_scan_score(
         &self,
-        Parameters(p): Parameters<ScanIdParam>,
+        Parameters(p): Parameters<ScanOrObjectParam>,
     ) -> Result<CallToolResult, McpError> {
-        let id = parse_uuid(&p.scan_id)?;
+        let id = resolve_scan(&self.client, p.scan_id.as_deref(), p.object_id.as_deref()).await?;
         match self.client.get_scan_score(id).await {
             Ok(score) => ok_json(&score),
             Err(e) => ok_err(e),
@@ -260,7 +244,7 @@ impl AnalyzerMcp {
     }
 
     #[tool(
-        description = "List available scan types and their analysis options. Returns image types (linux, docker, idf) with available analyses. Each analysis shows whether it runs by default."
+        description = "[Read] List available scan types and their analysis options. Returns image types (linux, docker, idf) with available analyses. Each analysis shows whether it runs by default."
     )]
     async fn get_scan_types(&self) -> Result<CallToolResult, McpError> {
         match self.client.get_scan_types().await {
@@ -269,56 +253,43 @@ impl AnalyzerMcp {
         }
     }
 
-    #[tool(description = "Get a scan overview — summary of all analyses with finding counts by severity. Shows CVE counts (critical/high/medium/low), malware detections, password issues, hardening issues, capabilities risk levels, crypto assets, SBOM component count, kernel configs. Use this for a quick assessment before drilling into specific analysis results.")]
+    #[tool(description = "[Read] Get a scan overview — summary of all analyses with finding counts by severity. Shows CVE counts (critical/high/medium/low), malware detections, password issues, hardening issues, capabilities risk levels, crypto assets, SBOM component count, kernel configs. Use this for a quick assessment before drilling into specific analysis results. Accepts scan_id or object_id.")]
     async fn get_scan_overview(
         &self,
-        Parameters(p): Parameters<ScanIdParam>,
+        Parameters(p): Parameters<ScanOrObjectParam>,
     ) -> Result<CallToolResult, McpError> {
-        let id = parse_uuid(&p.scan_id)?;
+        let id = resolve_scan(&self.client, p.scan_id.as_deref(), p.object_id.as_deref()).await?;
         match self.client.get_scan_overview(id).await {
             Ok(overview) => ok_json(&overview),
             Err(e) => ok_err(e),
         }
     }
 
-    #[tool(description = "Browse paginated analysis results for a specific analysis type. Returns detailed findings: CVE entries with CVSS scores, malware detections, hardening flags per binary, capabilities with risk levels, crypto assets, SBOM components, kernel security features, etc. Supports pagination (page, per_page) and search filtering. Analysis types: cve, password-hash, malware, hardening, capabilities, crypto, software-bom, kernel, info, symbols, tasks, stack-overflow.")]
+    #[tool(description = "[Read] Browse paginated analysis results for a specific analysis type. Returns detailed findings: CVE entries with CVSS scores, malware detections, hardening flags per binary, capabilities with risk levels, crypto assets, SBOM components, kernel security features, etc. Supports pagination (page, per_page) and search filtering. Analysis types: cve, password-hash, malware, hardening, capabilities, crypto, software-bom, kernel, info, symbols, tasks, stack-overflow. Accepts scan_id or object_id.")]
     async fn get_analysis_results(
         &self,
         Parameters(p): Parameters<AnalysisResultsParams>,
     ) -> Result<CallToolResult, McpError> {
-        let scan_id = parse_uuid(&p.scan_id)?;
+        let scan_id = resolve_scan(&self.client, p.scan_id.as_deref(), p.object_id.as_deref()).await?;
 
-        // Resolve the analysis type to its UUID
-        let scan = self.client.get_scan(scan_id).await.map_err(|e| {
-            McpError::internal_error(format!("Failed to fetch scan: {e:#}"), None)
+        let analysis_type = AnalysisType::from_api_name(&p.analysis_type).ok_or_else(|| {
+            McpError::invalid_params(
+                format!(
+                    "Unknown analysis type: '{}'. Valid types: cve, password-hash, malware, hardening, capabilities, crypto, software-bom, kernel, info, symbols, tasks, stack-overflow",
+                    p.analysis_type
+                ),
+                None,
+            )
         })?;
 
-        let analysis_id = scan
-            .analysis
-            .iter()
-            .find(|entry| entry.entry_type.analyses.iter().any(|a| a == &p.analysis_type))
-            .map(|entry| entry.id);
-
-        let analysis_id = match analysis_id {
-            Some(id) => id,
-            None => {
-                let available: Vec<_> = scan
-                    .analysis
-                    .iter()
-                    .flat_map(|e| e.entry_type.analyses.iter())
-                    .collect();
-                return ok_text(format!(
-                    "Error: analysis type '{}' not found in scan. Available: {}",
-                    p.analysis_type,
-                    available.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
-                ));
-            }
-        };
+        let analysis_id = crate::commands::scan::resolve_analysis_id(&self.client, scan_id, &analysis_type)
+            .await
+            .map_err(|e| McpError::invalid_params(format!("{e:#}"), None))?;
 
         let query = ResultsQuery {
             page: p.page.unwrap_or(1),
             per_page: p.per_page.unwrap_or(25),
-            sort_by: default_sort_by(&p.analysis_type).to_string(),
+            sort_by: analysis_type.default_sort_by().to_string(),
             sort_ord: "asc".to_string(),
             search: p.search,
         };
@@ -329,12 +300,12 @@ impl AnalyzerMcp {
         }
     }
 
-    #[tool(description = "Get compliance check results for a scan. Returns structured compliance data with sections, requirements, and pass/fail/unknown status for each check. Supported compliance types: 'cra' (EU Cyber Resilience Act). The result includes total/passed/failed/unknown/not-applicable counts.")]
+    #[tool(description = "[Read] Get compliance check results for a scan. Returns structured compliance data with sections, requirements, and pass/fail/unknown status for each check. Supported compliance types: 'cra' (EU Cyber Resilience Act). The result includes total/passed/failed/unknown/not-applicable counts. Accepts scan_id or object_id.")]
     async fn get_compliance(
         &self,
         Parameters(p): Parameters<ComplianceParams>,
     ) -> Result<CallToolResult, McpError> {
-        let scan_id = parse_uuid(&p.scan_id)?;
+        let scan_id = resolve_scan(&self.client, p.scan_id.as_deref(), p.object_id.as_deref()).await?;
         let ct = parse_compliance_type(&p.compliance_type)?;
         match self.client.get_compliance(scan_id, ct).await {
             Ok(report) => ok_json(&report),
@@ -342,24 +313,23 @@ impl AnalyzerMcp {
         }
     }
 
-    #[tool(description = "Download the SBOM (Software Bill of Materials) in CycloneDX JSON format. Saves to disk and returns the full JSON inline. The SBOM lists all software components found in the image: name, version, type, purl (Package URL), and licenses. Use this to understand the software supply chain, identify outdated packages, or cross-reference with CVE results.")]
+    #[tool(description = "[Read] Download the SBOM (Software Bill of Materials) in CycloneDX JSON format. Saves to disk and returns the full JSON inline. The SBOM lists all software components found in the image: name, version, type, purl (Package URL), and licenses. Use this to understand the software supply chain, identify outdated packages, or cross-reference with CVE results. Accepts scan_id or object_id.")]
     async fn download_sbom(
         &self,
         Parameters(p): Parameters<DownloadParams>,
     ) -> Result<CallToolResult, McpError> {
-        let id = parse_uuid(&p.scan_id)?;
+        let id = resolve_scan(&self.client, p.scan_id.as_deref(), p.object_id.as_deref()).await?;
         let path = match &p.output_path {
             Some(p) => PathBuf::from(p),
-            None => downloads_path(&p.scan_id, "sbom.json"),
+            None => downloads_path(&id.to_string(), "sbom.json"),
         };
         match self.client.download_sbom(id).await {
             Ok(bytes) => {
-                // Save to disk for the user
                 let save_msg = match save_to_path(&path, &bytes).await {
                     Ok(()) => format!("[Saved to {}]", path.display()),
                     Err(e) => format!("[Could not save to disk: {e}]"),
                 };
-                // Return the JSON content inline so Claude can read it
+                // Return the JSON content inline so the AI can read it
                 let content = String::from_utf8_lossy(&bytes);
                 ok_text(format!("{save_msg}\n\n{content}"))
             }
@@ -367,15 +337,15 @@ impl AnalyzerMcp {
         }
     }
 
-    #[tool(description = "Download the PDF security report for a completed scan. The report includes: Exein Rating, firmware details (OS, arch, kernel), executive summary with critical findings, CVE list by product and severity, binary hardening analysis, kernel security modules status, and remediation recommendations. Saves to disk (binary PDF) — returns the file path only.")]
+    #[tool(description = "[Read] Download the PDF security report for a completed scan. The report includes: Exein Rating, firmware details (OS, arch, kernel), executive summary with critical findings, CVE list by product and severity, binary hardening analysis, kernel security modules status, and remediation recommendations. Saves to disk (binary PDF) — returns the file path only. Accepts scan_id or object_id.")]
     async fn download_report(
         &self,
         Parameters(p): Parameters<DownloadParams>,
     ) -> Result<CallToolResult, McpError> {
-        let id = parse_uuid(&p.scan_id)?;
+        let id = resolve_scan(&self.client, p.scan_id.as_deref(), p.object_id.as_deref()).await?;
         let path = match &p.output_path {
             Some(p) => PathBuf::from(p),
-            None => downloads_path(&p.scan_id, "report.pdf"),
+            None => downloads_path(&id.to_string(), "report.pdf"),
         };
         match self.client.download_report(id).await {
             Ok(bytes) => match save_to_path(&path, &bytes).await {
@@ -386,17 +356,17 @@ impl AnalyzerMcp {
         }
     }
 
-    #[tool(description = "Download a compliance report PDF. Supported types: 'cra' (EU Cyber Resilience Act). Assesses firmware compliance with regulatory requirements. Saves to disk (binary PDF) — returns the file path only.")]
+    #[tool(description = "[Read] Download a compliance report PDF. Supported types: 'cra' (EU Cyber Resilience Act). Assesses firmware compliance with regulatory requirements. Saves to disk (binary PDF) — returns the file path only. Accepts scan_id or object_id.")]
     async fn download_compliance_report(
         &self,
         Parameters(p): Parameters<ComplianceDownloadParams>,
     ) -> Result<CallToolResult, McpError> {
-        let id = parse_uuid(&p.scan_id)?;
+        let id = resolve_scan(&self.client, p.scan_id.as_deref(), p.object_id.as_deref()).await?;
         let ct = parse_compliance_type(&p.compliance_type)?;
         let default_name = format!("{}_report.pdf", p.compliance_type);
         let path = match &p.output_path {
             Some(p) => PathBuf::from(p),
-            None => downloads_path(&p.scan_id, &default_name),
+            None => downloads_path(&id.to_string(), &default_name),
         };
         match self.client.download_compliance_report(id, ct).await {
             Ok(bytes) => match save_to_path(&path, &bytes).await {
@@ -407,140 +377,33 @@ impl AnalyzerMcp {
         }
     }
 
-    #[tool(description = "Cancel a running scan.")]
+    #[tool(description = "[Write] Cancel a running scan. Accepts scan_id or object_id.")]
     async fn cancel_scan(
         &self,
-        Parameters(p): Parameters<ScanIdParam>,
+        Parameters(p): Parameters<ScanOrObjectParam>,
     ) -> Result<CallToolResult, McpError> {
-        let id = parse_uuid(&p.scan_id)?;
+        let id = resolve_scan(&self.client, p.scan_id.as_deref(), p.object_id.as_deref()).await?;
         match self.client.cancel_scan(id).await {
             Ok(()) => ok_text(format!("Cancelled scan {id}")),
             Err(e) => ok_err(e),
         }
     }
 
-    #[tool(description = "Delete a scan.")]
+    #[tool(description = "[Critical] Delete a scan permanently. Accepts scan_id or object_id.")]
     async fn delete_scan(
         &self,
-        Parameters(p): Parameters<ScanIdParam>,
+        Parameters(p): Parameters<ScanOrObjectParam>,
     ) -> Result<CallToolResult, McpError> {
-        let id = parse_uuid(&p.scan_id)?;
+        let id = resolve_scan(&self.client, p.scan_id.as_deref(), p.object_id.as_deref()).await?;
         match self.client.delete_scan(id).await {
             Ok(()) => ok_text(format!("Deleted scan {id}")),
             Err(e) => ok_err(e),
         }
     }
 
-    // -- Config tools ---------------------------------------------------------
+    // -- Info tools -----------------------------------------------------------
 
-    #[tool(
-        description = "Configure an Analyzer profile with an API key and optional URL. Validates the key against the server before saving."
-    )]
-    async fn configure_profile(
-        &self,
-        Parameters(p): Parameters<ConfigureProfileParams>,
-    ) -> Result<CallToolResult, McpError> {
-        let profile_name = p.profile.as_deref().unwrap_or("default");
-        let url = p
-            .url
-            .unwrap_or_else(|| "https://analyzer.exein.io/api/".to_string());
-
-        // Validate the key
-        let parsed_url: url::Url = url.parse().map_err(|_| {
-            McpError::invalid_params(format!("Invalid URL: {url}"), None)
-        })?;
-        let client = AnalyzerClient::new(parsed_url, &p.api_key).map_err(|e| {
-            McpError::internal_error(format!("Failed to create client: {e:#}"), None)
-        })?;
-
-        let validation = match client.health().await {
-            Ok(_) => "Key validated successfully.",
-            Err(_) => "Could not validate key (server may be unreachable). Saving anyway.",
-        };
-
-        // Save
-        let mut config = ConfigFile::load().unwrap_or_default();
-        let profile = config.profile_mut(profile_name);
-        profile.api_key = Some(p.api_key);
-        profile.url = Some(url.clone());
-        config.save().map_err(|e| {
-            McpError::internal_error(format!("Failed to save config: {e:#}"), None)
-        })?;
-
-        ok_text(format!(
-            "{validation}\nProfile '{profile_name}' saved (URL: {url})."
-        ))
-    }
-
-    #[tool(description = "Get a configuration value. Valid keys: url, api-key, default-profile.")]
-    async fn config_get(
-        &self,
-        Parameters(p): Parameters<ConfigGetParams>,
-    ) -> Result<CallToolResult, McpError> {
-        let config = ConfigFile::load().unwrap_or_default();
-        let profile_name = p.profile.as_deref().unwrap_or(&config.default_profile);
-        let prof = config.profile(Some(profile_name));
-
-        let value = match p.key.as_str() {
-            "url" => prof.url.as_deref().unwrap_or("(not set)").to_string(),
-            "api-key" | "api_key" => {
-                if prof.api_key.is_some() {
-                    "(set)".to_string()
-                } else {
-                    "(not set)".to_string()
-                }
-            }
-            "default-profile" | "default_profile" => config.default_profile.clone(),
-            other => {
-                return ok_text(format!(
-                    "Unknown config key: {other}. Valid keys: url, api-key, default-profile"
-                ));
-            }
-        };
-
-        ok_text(format!("{} = {}", p.key, value))
-    }
-
-    #[tool(description = "Set a configuration value. Valid keys: url, api-key, default-profile.")]
-    async fn config_set(
-        &self,
-        Parameters(p): Parameters<ConfigSetParams>,
-    ) -> Result<CallToolResult, McpError> {
-        let mut config = ConfigFile::load().unwrap_or_default();
-        let profile_name = p.profile.as_deref().unwrap_or("default");
-        let prof = config.profile_mut(profile_name);
-
-        match p.key.as_str() {
-            "url" => {
-                let _: url::Url = p.value.parse().map_err(|_| {
-                    McpError::invalid_params(format!("Invalid URL: {}", p.value), None)
-                })?;
-                prof.url = Some(p.value.clone());
-            }
-            "api-key" | "api_key" => {
-                prof.api_key = Some(p.value.clone());
-            }
-            "default-profile" | "default_profile" => {
-                config.default_profile = p.value.clone();
-            }
-            other => {
-                return ok_text(format!(
-                    "Unknown config key: {other}. Valid keys: url, api-key, default-profile"
-                ));
-            }
-        }
-
-        config.save().map_err(|e| {
-            McpError::internal_error(format!("Failed to save config: {e:#}"), None)
-        })?;
-
-        ok_text(format!(
-            "Set {} = {} (profile: {profile_name})",
-            p.key, p.value
-        ))
-    }
-
-    #[tool(description = "Show the currently resolved configuration: active profile name, Analyzer API URL, and masked API key. Useful to verify which account and server you are connected to.")]
+    #[tool(description = "[Read] Show the currently resolved configuration: active profile name, Analyzer API URL, and masked API key. Useful to verify which account and server you are connected to.")]
     async fn whoami(&self) -> Result<CallToolResult, McpError> {
         let config = ConfigFile::load().unwrap_or_default();
         let profile_name = std::env::var("ANALYZER_PROFILE")
@@ -583,84 +446,50 @@ impl ServerHandler for AnalyzerMcp {
                 "Exein Analyzer MCP server — scan firmware and container images for \
                  vulnerabilities, generate SBOMs, and check compliance.\n\
                  \n\
+                 ## Tool Access Classification\n\
+                 Each tool is tagged [Read], [Write], or [Critical]:\n\
+                 - **[Read]**: Safe, no side effects — call freely.\n\
+                 - **[Write]**: Creates or modifies state — confirm with the user before calling.\n\
+                 - **[Critical]**: Destructive/irreversible — always confirm with the user.\n\
+                 \n\
+                 ## Identifying Scans\n\
+                 Most tools accept either `scan_id` (scan UUID) or `object_id` (object UUID). \
+                 When `object_id` is provided, the object's most recent scan is used automatically. \
+                 This lets you go from object to results without looking up scan IDs.\n\
+                 \n\
                  ## Quick Start\n\
-                 1. Call `list_objects` to see existing objects (devices/products).\n\
-                 2. Call `get_scan_types` to discover available image types and analyses.\n\
-                 3. Create an object with `create_object` if needed.\n\
-                 4. Upload and scan with `create_scan` (provide object_id, file path, scan type).\n\
-                 5. Poll `get_scan_status` until all analyses reach 'success' (or 'error').\n\
-                 6. Use `get_scan_overview` for a quick summary of all findings.\n\
-                 7. Drill down with `get_analysis_results` for specific analysis types.\n\
-                 8. Retrieve scores and downloads: `get_scan_score`, `download_sbom`, \
-                    `download_report`, `download_compliance_report`.\n\
-                 9. Check compliance with `get_compliance` (e.g. CRA).\n\
+                 1. `list_objects` — see existing objects (devices/products).\n\
+                 2. `get_scan_types` — discover available image types and analyses.\n\
+                 3. `create_object` — create an object if needed.\n\
+                 4. `create_scan` — upload and scan (provide object_id, file path, scan type).\n\
+                 5. `get_scan_status` — poll until all analyses reach 'success'.\n\
+                 6. `get_scan_overview` — quick summary of all findings.\n\
+                 7. `get_analysis_results` — drill into specific analysis types.\n\
+                 8. `get_scan_score`, `download_sbom`, `download_report` — scores and artifacts.\n\
+                 9. `get_compliance` — check regulatory compliance (e.g. CRA).\n\
                  \n\
                  ## Image Types\n\
-                 - **linux**: Linux firmware images (e.g. OpenWrt, Yocto, Buildroot). Supports all analyses.\n\
-                 - **docker**: Docker/OCI container images.\n\
-                 - **idf**: ESP-IDF firmware images (Espressif IoT Development Framework). \
-                   Supports a subset of analyses (info, cve, software-bom). \
-                   Hardening and kernel-security checks are not applicable to bare-metal RTOS targets.\n\
+                 - **linux**: Linux firmware (OpenWrt, Yocto, Buildroot). All analyses.\n\
+                 - **docker**: Docker/OCI containers.\n\
+                 - **idf**: ESP-IDF firmware. Subset of analyses (info, cve, software-bom).\n\
                  \n\
                  ## Analysis Types\n\
-                 - **info**: Extracts firmware metadata — OS, architecture, kernel version.\n\
-                 - **cve**: CVE vulnerability scan powered by Kepler (Exein open-source tool using NIST NVD). \
-                   Finds known vulnerabilities in software components. Results are grouped by product with \
-                   severity breakdown: Critical, High, Medium, Low.\n\
-                 - **software-bom**: Generates the Software Bill of Materials (SBOM) in CycloneDX JSON format. \
-                   Lists all software components, versions, and licenses found in the image.\n\
-                 - **malware**: Scans the filesystem for known malicious files (malware, trojans, etc.).\n\
-                 - **crypto**: Cryptographic analysis — identifies certificates, public/private keys.\n\
-                 - **hardening**: Binary hardening checks — verifies compiler security flags for each executable: \
-                   Stack Canary, NX (non-executable stack), PIE (position-independent), RELRO (relocation read-only), \
-                   Fortify Source. Reports weak binaries count.\n\
-                 - **password-hash**: Detects hard-coded weak passwords in the firmware filesystem.\n\
-                 - **kernel**: Checks kernel security modules: SECCOMP, SELINUX, APPARMOR, KASLR, \
-                   STACKPROTECTOR, FORTIFYSOURCE, etc. Reports enabled/not-enabled status.\n\
-                 - **capabilities**: Analyzes executable capabilities and syscalls, assigning risk levels.\n\
-                 - **symbols** (IDF only): Lists symbols from ESP-IDF firmware.\n\
-                 - **tasks** (IDF only): Lists RTOS tasks.\n\
-                 - **stack-overflow** (IDF only): Stack overflow detection method.\n\
+                 cve, software-bom, malware, crypto, hardening, password-hash, kernel, \
+                 capabilities, info, symbols (IDF), tasks (IDF), stack-overflow (IDF).\n\
                  \n\
                  ## Exein Rating (Security Score)\n\
-                 - Score is 0-100, where **lower is better** (0 = best, 100 = worst).\n\
-                 - 0: Perfect — no issues found in this category.\n\
-                 - 1-30: Good security posture.\n\
-                 - 31-59: Mediocre — address higher-risk vulnerabilities.\n\
-                 - 60-100: Poor — critical security issues require immediate attention.\n\
-                 - The overall score is a weighted aggregate of individual analysis scores.\n\
-                 - Per-analysis scores: malware=0 means clean (no malware), cve=100 means \
-                   severe vulnerability exposure, hardening=50 means partial compiler protections, etc.\n\
-                 - IMPORTANT: Do NOT interpret score 0 as 'bad'. Score 0 means the best possible result \
-                   (no issues detected). Score 100 is the worst.\n\
-                 \n\
-                 ## Browsing Results\n\
-                 - Use `get_scan_overview` first for a high-level summary of all analyses.\n\
-                 - Then use `get_analysis_results` with a specific analysis_type to browse detailed findings.\n\
-                 - Results are paginated (default 25 per page). Use page/per_page params to navigate.\n\
-                 - Use the search param to filter results (e.g. search='openssl' for CVEs).\n\
+                 0-100 where **lower is better** (0 = no issues, 100 = worst). \
+                 Score 0 means best possible result. The overall score is a weighted aggregate \
+                 of per-analysis scores.\n\
                  \n\
                  ## Compliance\n\
-                 - `get_compliance` returns structured compliance check results (pass/fail per requirement).\n\
-                 - `download_compliance_report` downloads the full PDF compliance report.\n\
-                 - Supported standard: 'cra' (EU Cyber Resilience Act).\n\
+                 Supported standard: 'cra' (EU Cyber Resilience Act). \
+                 `get_compliance` returns structured pass/fail results. \
+                 `download_compliance_report` downloads the PDF.\n\
                  \n\
-                 ## Scan Status\n\
-                 - Each analysis within a scan has its own status: pending → in-progress → success | error | canceled.\n\
-                 - The overall scan status reflects the aggregate of all analyses.\n\
-                 - Scans typically take 1-10 minutes depending on image size and analyses requested.\n\
-                 \n\
-                 ## Downloaded Files\n\
-                 - PDF reports and SBOMs are saved to `~/.cache/analyzer/downloads/<scan_id>/` by default.\n\
-                 - The SBOM (download_sbom) is also returned inline as JSON so you can analyze it directly.\n\
-                 - PDF reports (download_report, download_compliance_report) are binary files saved to disk — \
-                   the tool returns only the file path. Use a filesystem MCP server to access them if needed.\n\
-                 \n\
-                 ## SBOM Format\n\
-                 - Format: CycloneDX JSON (ECMA-424, 1st edition June 2024 / CycloneDX 1.6).\n\
-                 - Also compatible with: SPDX 3.0.1 (on request via download_sbom parameters).\n\
-                 - Key fields: `components[]` array with `name`, `version`, `type`, `purl` (Package URL), `licenses`.\n\
-                 - Use the SBOM to understand the full software supply chain of the scanned image."
+                 ## Downloads\n\
+                 PDFs and SBOMs save to `~/.cache/analyzer/downloads/<scan_id>/` by default. \
+                 The SBOM is also returned inline as JSON. PDF reports return only the file path."
                     .into(),
             ),
         }
@@ -699,26 +528,25 @@ fn parse_uuid(s: &str) -> Result<Uuid, McpError> {
 }
 
 fn parse_compliance_type(s: &str) -> Result<ComplianceType, McpError> {
-    match s.to_lowercase().as_str() {
-        "cra" => Ok(ComplianceType::Cra),
-        other => Err(McpError::invalid_params(
-            format!("Unknown compliance type: '{other}'. Supported: cra"),
+    ComplianceType::from_name(s).ok_or_else(|| {
+        McpError::invalid_params(
+            format!("Unknown compliance type: '{s}'. Supported: cra"),
             None,
-        )),
-    }
+        )
+    })
 }
 
-/// Default sort-by field for a given analysis type API name.
-fn default_sort_by(analysis_type: &str) -> &'static str {
-    match analysis_type {
-        "cve" | "password-hash" | "hardening" | "capabilities" => "severity",
-        "malware" => "filename",
-        "crypto" => "type",
-        "software-bom" | "info" | "symbols" | "stack-overflow" => "name",
-        "kernel" => "features",
-        "tasks" => "function",
-        _ => "name",
-    }
+/// Resolve a scan ID from optional scan_id / object_id string params.
+async fn resolve_scan(
+    client: &AnalyzerClient,
+    scan_id: Option<&str>,
+    object_id: Option<&str>,
+) -> Result<Uuid, McpError> {
+    let scan_uuid = scan_id.map(parse_uuid).transpose()?;
+    let object_uuid = object_id.map(parse_uuid).transpose()?;
+    crate::commands::scan::resolve_scan_id(client, scan_uuid, object_uuid)
+        .await
+        .map_err(|e| McpError::invalid_params(format!("{e:#}"), None))
 }
 
 fn ok_json<T: serde::Serialize>(value: &T) -> Result<CallToolResult, McpError> {
@@ -748,7 +576,7 @@ fn downloads_path(scan_id: &str, filename: &str) -> PathBuf {
 }
 
 /// Create parent directories and write bytes to a file.
-async fn save_to_path(path: &PathBuf, bytes: &[u8]) -> std::io::Result<()> {
+async fn save_to_path(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         tokio::fs::create_dir_all(parent).await?;
     }
