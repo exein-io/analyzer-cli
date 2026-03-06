@@ -349,9 +349,7 @@ async fn main() -> ExitCode {
     match cli.command {
         Some(_) => {}
         None => {
-            <Cli as clap::CommandFactory>::command()
-                .print_help()
-                .ok();
+            <Cli as clap::CommandFactory>::command().print_help().ok();
             return ExitCode::SUCCESS;
         }
     }

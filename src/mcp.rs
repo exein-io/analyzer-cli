@@ -17,7 +17,9 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::client::AnalyzerClient;
-use crate::client::models::{AnalysisType, ComplianceType, CreateObject, ResultsQuery, ScanTypeRequest};
+use crate::client::models::{
+    AnalysisType, ComplianceType, CreateObject, ResultsQuery, ScanTypeRequest,
+};
 use crate::config::ConfigFile;
 
 // ===========================================================================
@@ -137,7 +139,9 @@ impl AnalyzerMcp {
 
     // -- Object tools ---------------------------------------------------------
 
-    #[tool(description = "[Read] List all objects (devices/products) in your Analyzer account. Returns JSON array with id, name, description, tags, score (current and previous Exein Rating), and last scan info.")]
+    #[tool(
+        description = "[Read] List all objects (devices/products) in your Analyzer account. Returns JSON array with id, name, description, tags, score (current and previous Exein Rating), and last scan info."
+    )]
     async fn list_objects(&self) -> Result<CallToolResult, McpError> {
         match self.client.list_objects().await {
             Ok(page) => ok_json(&page.data),
@@ -161,7 +165,9 @@ impl AnalyzerMcp {
         }
     }
 
-    #[tool(description = "[Critical] Delete an object by its UUID. This permanently removes the object and all associated scans.")]
+    #[tool(
+        description = "[Critical] Delete an object by its UUID. This permanently removes the object and all associated scans."
+    )]
     async fn delete_object(
         &self,
         Parameters(p): Parameters<ObjectIdParam>,
@@ -219,7 +225,9 @@ impl AnalyzerMcp {
         }
     }
 
-    #[tool(description = "[Read] Get the current status of a scan and its individual analyses. Each analysis has a status: 'pending' (queued), 'in-progress' (running), 'success' (done), 'error' (failed), 'canceled'. The overall scan status reflects the aggregate. Poll this until all analyses reach a terminal state (success/error/canceled). Accepts scan_id or object_id (resolves to most recent scan).")]
+    #[tool(
+        description = "[Read] Get the current status of a scan and its individual analyses. Each analysis has a status: 'pending' (queued), 'in-progress' (running), 'success' (done), 'error' (failed), 'canceled'. The overall scan status reflects the aggregate. Poll this until all analyses reach a terminal state (success/error/canceled). Accepts scan_id or object_id (resolves to most recent scan)."
+    )]
     async fn get_scan_status(
         &self,
         Parameters(p): Parameters<ScanOrObjectParam>,
@@ -231,7 +239,9 @@ impl AnalyzerMcp {
         }
     }
 
-    #[tool(description = "[Read] Get the Exein Rating (security score) for a completed scan. Score is 0-100 where LOWER IS BETTER: 0 = no issues (best), 100 = worst. Returns overall score plus per-analysis breakdown (cve, hardening, kernel, malware, password-hash, capabilities). A score of 0 means clean/no issues found. Accepts scan_id or object_id.")]
+    #[tool(
+        description = "[Read] Get the Exein Rating (security score) for a completed scan. Score is 0-100 where LOWER IS BETTER: 0 = no issues (best), 100 = worst. Returns overall score plus per-analysis breakdown (cve, hardening, kernel, malware, password-hash, capabilities). A score of 0 means clean/no issues found. Accepts scan_id or object_id."
+    )]
     async fn get_scan_score(
         &self,
         Parameters(p): Parameters<ScanOrObjectParam>,
@@ -253,7 +263,9 @@ impl AnalyzerMcp {
         }
     }
 
-    #[tool(description = "[Read] Get a scan overview — summary of all analyses with finding counts by severity. Shows CVE counts (critical/high/medium/low), malware detections, password issues, hardening issues, capabilities risk levels, crypto assets, SBOM component count, kernel configs. Use this for a quick assessment before drilling into specific analysis results. Accepts scan_id or object_id.")]
+    #[tool(
+        description = "[Read] Get a scan overview — summary of all analyses with finding counts by severity. Shows CVE counts (critical/high/medium/low), malware detections, password issues, hardening issues, capabilities risk levels, crypto assets, SBOM component count, kernel configs. Use this for a quick assessment before drilling into specific analysis results. Accepts scan_id or object_id."
+    )]
     async fn get_scan_overview(
         &self,
         Parameters(p): Parameters<ScanOrObjectParam>,
@@ -265,12 +277,15 @@ impl AnalyzerMcp {
         }
     }
 
-    #[tool(description = "[Read] Browse paginated analysis results for a specific analysis type. Returns detailed findings: CVE entries with CVSS scores, malware detections, hardening flags per binary, capabilities with risk levels, crypto assets, SBOM components, kernel security features, etc. Supports pagination (page, per_page) and search filtering. Analysis types: cve, password-hash, malware, hardening, capabilities, crypto, software-bom, kernel, info, symbols, tasks, stack-overflow. Accepts scan_id or object_id.")]
+    #[tool(
+        description = "[Read] Browse paginated analysis results for a specific analysis type. Returns detailed findings: CVE entries with CVSS scores, malware detections, hardening flags per binary, capabilities with risk levels, crypto assets, SBOM components, kernel security features, etc. Supports pagination (page, per_page) and search filtering. Analysis types: cve, password-hash, malware, hardening, capabilities, crypto, software-bom, kernel, info, symbols, tasks, stack-overflow. Accepts scan_id or object_id."
+    )]
     async fn get_analysis_results(
         &self,
         Parameters(p): Parameters<AnalysisResultsParams>,
     ) -> Result<CallToolResult, McpError> {
-        let scan_id = resolve_scan(&self.client, p.scan_id.as_deref(), p.object_id.as_deref()).await?;
+        let scan_id =
+            resolve_scan(&self.client, p.scan_id.as_deref(), p.object_id.as_deref()).await?;
 
         let analysis_type = AnalysisType::from_api_name(&p.analysis_type).ok_or_else(|| {
             McpError::invalid_params(
@@ -282,9 +297,10 @@ impl AnalyzerMcp {
             )
         })?;
 
-        let analysis_id = crate::commands::scan::resolve_analysis_id(&self.client, scan_id, &analysis_type)
-            .await
-            .map_err(|e| McpError::invalid_params(format!("{e:#}"), None))?;
+        let analysis_id =
+            crate::commands::scan::resolve_analysis_id(&self.client, scan_id, &analysis_type)
+                .await
+                .map_err(|e| McpError::invalid_params(format!("{e:#}"), None))?;
 
         let query = ResultsQuery {
             page: p.page.unwrap_or(1),
@@ -294,18 +310,25 @@ impl AnalyzerMcp {
             search: p.search,
         };
 
-        match self.client.get_analysis_results(scan_id, analysis_id, &query).await {
+        match self
+            .client
+            .get_analysis_results(scan_id, analysis_id, &query)
+            .await
+        {
             Ok(results) => ok_json(&results),
             Err(e) => ok_err(e),
         }
     }
 
-    #[tool(description = "[Read] Get compliance check results for a scan. Returns structured compliance data with sections, requirements, and pass/fail/unknown status for each check. Supported compliance types: 'cra' (EU Cyber Resilience Act). The result includes total/passed/failed/unknown/not-applicable counts. Accepts scan_id or object_id.")]
+    #[tool(
+        description = "[Read] Get compliance check results for a scan. Returns structured compliance data with sections, requirements, and pass/fail/unknown status for each check. Supported compliance types: 'cra' (EU Cyber Resilience Act). The result includes total/passed/failed/unknown/not-applicable counts. Accepts scan_id or object_id."
+    )]
     async fn get_compliance(
         &self,
         Parameters(p): Parameters<ComplianceParams>,
     ) -> Result<CallToolResult, McpError> {
-        let scan_id = resolve_scan(&self.client, p.scan_id.as_deref(), p.object_id.as_deref()).await?;
+        let scan_id =
+            resolve_scan(&self.client, p.scan_id.as_deref(), p.object_id.as_deref()).await?;
         let ct = parse_compliance_type(&p.compliance_type)?;
         match self.client.get_compliance(scan_id, ct).await {
             Ok(report) => ok_json(&report),
@@ -313,7 +336,9 @@ impl AnalyzerMcp {
         }
     }
 
-    #[tool(description = "[Read] Download the SBOM (Software Bill of Materials) in CycloneDX JSON format. Saves to disk and returns the full JSON inline. The SBOM lists all software components found in the image: name, version, type, purl (Package URL), and licenses. Use this to understand the software supply chain, identify outdated packages, or cross-reference with CVE results. Accepts scan_id or object_id.")]
+    #[tool(
+        description = "[Read] Download the SBOM (Software Bill of Materials) in CycloneDX JSON format. Saves to disk and returns the full JSON inline. The SBOM lists all software components found in the image: name, version, type, purl (Package URL), and licenses. Use this to understand the software supply chain, identify outdated packages, or cross-reference with CVE results. Accepts scan_id or object_id."
+    )]
     async fn download_sbom(
         &self,
         Parameters(p): Parameters<DownloadParams>,
@@ -337,7 +362,9 @@ impl AnalyzerMcp {
         }
     }
 
-    #[tool(description = "[Read] Download the PDF security report for a completed scan. The report includes: Exein Rating, firmware details (OS, arch, kernel), executive summary with critical findings, CVE list by product and severity, binary hardening analysis, kernel security modules status, and remediation recommendations. Saves to disk (binary PDF) — returns the file path only. Accepts scan_id or object_id.")]
+    #[tool(
+        description = "[Read] Download the PDF security report for a completed scan. The report includes: Exein Rating, firmware details (OS, arch, kernel), executive summary with critical findings, CVE list by product and severity, binary hardening analysis, kernel security modules status, and remediation recommendations. Saves to disk (binary PDF) — returns the file path only. Accepts scan_id or object_id."
+    )]
     async fn download_report(
         &self,
         Parameters(p): Parameters<DownloadParams>,
@@ -356,7 +383,9 @@ impl AnalyzerMcp {
         }
     }
 
-    #[tool(description = "[Read] Download a compliance report PDF. Supported types: 'cra' (EU Cyber Resilience Act). Assesses firmware compliance with regulatory requirements. Saves to disk (binary PDF) — returns the file path only. Accepts scan_id or object_id.")]
+    #[tool(
+        description = "[Read] Download a compliance report PDF. Supported types: 'cra' (EU Cyber Resilience Act). Assesses firmware compliance with regulatory requirements. Saves to disk (binary PDF) — returns the file path only. Accepts scan_id or object_id."
+    )]
     async fn download_compliance_report(
         &self,
         Parameters(p): Parameters<ComplianceDownloadParams>,
@@ -370,7 +399,11 @@ impl AnalyzerMcp {
         };
         match self.client.download_compliance_report(id, ct).await {
             Ok(bytes) => match save_to_path(&path, &bytes).await {
-                Ok(()) => ok_text(format!("{} report saved to {}", ct.display_name(), path.display())),
+                Ok(()) => ok_text(format!(
+                    "{} report saved to {}",
+                    ct.display_name(),
+                    path.display()
+                )),
                 Err(e) => ok_text(format!("Error writing file: {e}")),
             },
             Err(e) => ok_err(e),
@@ -403,11 +436,13 @@ impl AnalyzerMcp {
 
     // -- Info tools -----------------------------------------------------------
 
-    #[tool(description = "[Read] Show the currently resolved configuration: active profile name, Analyzer API URL, and masked API key. Useful to verify which account and server you are connected to.")]
+    #[tool(
+        description = "[Read] Show the currently resolved configuration: active profile name, Analyzer API URL, and masked API key. Useful to verify which account and server you are connected to."
+    )]
     async fn whoami(&self) -> Result<CallToolResult, McpError> {
         let config = ConfigFile::load().unwrap_or_default();
-        let profile_name = std::env::var("ANALYZER_PROFILE")
-            .unwrap_or_else(|_| config.default_profile.clone());
+        let profile_name =
+            std::env::var("ANALYZER_PROFILE").unwrap_or_else(|_| config.default_profile.clone());
         let prof = config.profile(Some(&profile_name));
 
         let url = std::env::var("ANALYZER_URL")
