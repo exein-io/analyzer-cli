@@ -134,7 +134,17 @@ pub async fn run_report(
 }
 
 /// Download the SBOM.
-pub async fn run_sbom(client: &AnalyzerClient, scan_id: Uuid, output_path: PathBuf) -> Result<()> {
+pub async fn run_sbom(
+    client: &AnalyzerClient,
+    scan_id: Uuid,
+    output_path: PathBuf,
+    wait: bool,
+    interval: Duration,
+    timeout: Duration,
+) -> Result<()> {
+    if wait {
+        wait_for_completion(client, scan_id, interval, timeout).await?;
+    }
     output::status("Downloading", "SBOM...");
     let bytes = client.download_sbom(scan_id).await?;
     tokio::fs::write(&output_path, &bytes).await?;
