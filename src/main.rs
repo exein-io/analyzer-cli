@@ -242,6 +242,18 @@ enum ScanCommand {
         /// Output file path.
         #[arg(short = 'O', long)]
         output: PathBuf,
+
+        /// Wait for scan completion first.
+        #[arg(short, long)]
+        wait: bool,
+
+        /// Poll interval when waiting.
+        #[arg(long, value_parser = humantime::parse_duration, default_value = "2s")]
+        interval: Duration,
+
+        /// Maximum wait time.
+        #[arg(long, value_parser = humantime::parse_duration, default_value = "10m")]
+        timeout: Duration,
     },
 
     /// Download a compliance report (PDF).
@@ -435,9 +447,12 @@ async fn run(cli: Cli) -> Result<()> {
                     scan_id,
                     object_id,
                     output,
+                    wait,
+                    interval,
+                    timeout,
                 } => {
                     let sid = commands::scan::resolve_scan_id(&client, scan_id, object_id).await?;
-                    commands::scan::run_sbom(&client, sid, output).await
+                    commands::scan::run_sbom(&client, sid, output, wait, interval, timeout).await
                 }
                 ScanCommand::ComplianceReport {
                     scan_id,
