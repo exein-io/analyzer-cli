@@ -37,7 +37,7 @@ get_latest_version() {
 }
 
 main() {
-    local platform version url tmp
+    local platform version url
 
     platform="$(detect_platform)"
     version="${VERSION:-$(get_latest_version)}"
