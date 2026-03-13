@@ -6,6 +6,7 @@
 mod client;
 mod commands;
 mod config;
+mod mcp;
 mod output;
 
 use std::path::PathBuf;
@@ -31,9 +32,12 @@ use crate::output::Format;
     about,
     long_about = None,
     propagate_version = true,
-    arg_required_else_help = true,
 )]
 struct Cli {
+    /// Run as an MCP (Model Context Protocol) server over stdio.
+    #[arg(long)]
+    mcp: bool,
+
     /// API key (overrides config file and ANALYZER_API_KEY env var).
     #[arg(long, global = true, env = "ANALYZER_API_KEY", hide_env_values = true)]
     api_key: Option<String>,
@@ -51,7 +55,7 @@ struct Cli {
     format: Format,
 
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(Subcommand)]
@@ -346,6 +350,22 @@ enum ScanCommand {
 async fn main() -> ExitCode {
     let cli = Cli::parse();
 
+    if cli.mcp {
+        if let Err(e) = mcp::serve(cli.api_key, cli.url, cli.profile).await {
+            eprintln!("MCP server error: {e:#}");
+            return ExitCode::FAILURE;
+        }
+        return ExitCode::SUCCESS;
+    }
+
+    match cli.command {
+        Some(_) => {}
+        None => {
+            <Cli as clap::CommandFactory>::command().print_help().ok();
+            return ExitCode::SUCCESS;
+        }
+    }
+
     if let Err(e) = run(cli).await {
         output::error(&format!("{e:#}"));
         ExitCode::FAILURE
@@ -361,7 +381,7 @@ async fn run(cli: Cli) -> Result<()> {
     let profile = cli.profile;
     let format = cli.format;
 
-    match cli.command {
+    match cli.command.expect("command is checked in main") {
         // -- Auth (no API key required) -----------------------------------
         Command::Login {
             url: login_url,

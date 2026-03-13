@@ -484,7 +484,7 @@ pub async fn run_overview(client: &AnalyzerClient, scan_id: Uuid, format: Format
 // ===========================================================================
 
 /// Resolve an analysis type name to its UUID by fetching the scan metadata.
-async fn resolve_analysis_id(
+pub async fn resolve_analysis_id(
     client: &AnalyzerClient,
     scan_id: Uuid,
     analysis_type: &AnalysisType,

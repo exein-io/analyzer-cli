@@ -227,6 +227,56 @@ analyzer scan overview --object <ID> --format json | jq '.analyses'
 analyzer scan results --object <ID> --analysis cve --format json | jq '.findings'
 ```
 
+### MCP Server mode
+
+The CLI can run as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server, allowing AI assistants like Claude to use Analyzer tools directly.
+
+```bash
+# Start the MCP server (uses default profile)
+analyzer --mcp
+
+# Use a specific profile
+analyzer --mcp --profile staging
+
+# Override API key and URL via environment
+ANALYZER_API_KEY=your-key ANALYZER_URL=https://my-instance.example.com/api/ analyzer --mcp
+```
+
+**Prerequisites:** You must have a valid configuration before starting the MCP server. Run `analyzer login` at least once, or ensure a profile is configured in `~/.config/analyzer/config.toml`.
+
+The MCP server exposes all CLI operations as structured tools: managing objects, creating scans, retrieving scores, browsing analysis results, checking compliance, downloading SBOMs and reports. It communicates over stdio using JSON-RPC, so stdout is reserved for the protocol — all logs go to stderr.
+
+#### Configure in Claude Code
+
+Add to your `~/.claude.json` (or project-level `.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "analyzer": {
+      "command": "/path/to/analyzer",
+      "args": ["--mcp"]
+    }
+  }
+}
+```
+
+To use a specific profile or API key:
+
+```json
+{
+  "mcpServers": {
+    "analyzer": {
+      "command": "/path/to/analyzer",
+      "args": ["--mcp", "--profile", "staging"],
+      "env": {
+        "ANALYZER_API_KEY": "your-key"
+      }
+    }
+  }
+}
+```
+
 ### Shell completions
 
 ```bash

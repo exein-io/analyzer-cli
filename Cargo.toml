@@ -1,6 +1,6 @@
 [package]
 name = "analyzer-cli"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "CLI for Exein Analyzer - firmware and container security scanning"
 license = "Apache-2.0"
@@ -36,6 +36,8 @@ url = { version = "2", features = ["serde"] }
 humantime = "2"
 bytes = "1"
 clap_complete = "4"
+rmcp = { version = "0.12", features = ["server", "macros", "transport-io"] }
+schemars = "1"
 
 [dev-dependencies]
 assert_cmd = "2"

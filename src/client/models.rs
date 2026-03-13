@@ -605,6 +605,14 @@ impl ComplianceType {
             Self::Cra => "Cyber Resilience Act",
         }
     }
+
+    /// Parse from a user-provided string (e.g. "cra").
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name.to_lowercase().as_str() {
+            "cra" => Some(Self::Cra),
+            _ => None,
+        }
+    }
 }
 
 // === Analysis Type enum (for CLI) ===
@@ -641,6 +649,25 @@ impl AnalysisType {
             Self::Symbols => "symbols",
             Self::Tasks => "tasks",
             Self::StackOverflow => "stack-overflow",
+        }
+    }
+
+    /// Parse from the API name string (e.g. "cve", "software-bom").
+    pub fn from_api_name(name: &str) -> Option<Self> {
+        match name {
+            "cve" => Some(Self::Cve),
+            "password-hash" => Some(Self::PasswordHash),
+            "malware" => Some(Self::Malware),
+            "hardening" => Some(Self::Hardening),
+            "capabilities" => Some(Self::Capabilities),
+            "crypto" => Some(Self::Crypto),
+            "software-bom" => Some(Self::SoftwareBom),
+            "kernel" => Some(Self::Kernel),
+            "info" => Some(Self::Info),
+            "symbols" => Some(Self::Symbols),
+            "tasks" => Some(Self::Tasks),
+            "stack-overflow" => Some(Self::StackOverflow),
+            _ => None,
         }
     }
 
